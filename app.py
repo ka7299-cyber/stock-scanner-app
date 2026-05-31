@@ -152,7 +152,8 @@ if st.button("開始掃描"):
         if ticker not in data.columns.levels[0]:
             continue
         df = data[ticker].dropna()
-        if len(df) < 70: continue
+        if len(df) < 70: 
+            continue
 
         # 均線計算
         short_ma = find_best_ma_v2(df, 16, 25)
@@ -164,4 +165,44 @@ if st.button("開始掃描"):
         price = last['Close']
         ms_v = last['MS']
         ml_v = last['ML']
-        pct = (price - df['Close
+        pct = (price - df['Close'].iloc[-2]) / df['Close'].iloc[-2] * 100
+
+        # ★ 全市場強勢股條件：漲幅 >3%
+        if option == "全市場強勢股" and pct < 3:
+            continue
+
+        # 趨勢判斷
+        if price > ms_v and ms_v > ml_v:
+            trend = "🔥 強勢多頭 (抱緊)"
+        elif ms_v >= price >= ml_v:
+            trend = "⚠️ 多頭回檔 (買點)"
+        elif ms_v >= ml_v >= price:
+            trend = "⚡ 跌破防線 (轉弱)"
+        elif price > ms_v and ms_v <= ml_v:
+            trend = "🛡️ 底部反彈 (搶短)"
+        elif ml_v >= ms_v >= price:
+            trend = "❄️ 絕對空頭 (觀望)"
+        else:
+            trend = "🧩 均線糾結 (震盪)"
+
+        # 籌碼分析
+        crawler = ChipCrawlerV160(code)
+        m, i, s = crawler.get_latest_chip_summary(df.index[-1])
+        chip_msg, trend = analyze_chip_status(m, i, s, trend)
+
+        results.append({
+            "代號": code,
+            "現價": f"{price:.1f}",
+            "漲跌": f"{pct:+.1f}%",
+            "短均線": f"{ms_v:.1f}",
+            "長均線": f"{ml_v:.1f}",
+            "趨勢判斷": trend,
+            "籌碼分析": chip_msg
+        })
+
+    # 結果輸出
+    if results:
+        st.success(f"🎉 共找到 {len(results)} 檔潛力股")
+        st.dataframe(pd.DataFrame(results))
+    else:
+        st.info("💡 今日無符合條件的股票")
