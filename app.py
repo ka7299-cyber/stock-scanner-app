@@ -6,9 +6,21 @@ from io import StringIO
 import numpy as np
 from scipy.signal import argrelextrema
 
-# -------------------------------
+# ==========================================
+# 內建產業板塊資料庫 (取自 V82)
+# ==========================================
+SECTOR_DB = {
+    '半導體/IC設計': ['2330','2454','2303','3711','3034','3035','2379','3443','3661','6531'],
+    'AI伺服器/電腦': ['2382','3231','2356','6669','2376','2377','2301','2353','2324','2357'],
+    '航運/運輸': ['2603','2609','2615','2618','2610','2637','2606','2605','2634','2636'],
+    '金融/金控': ['2881','2882','2891','2886','2884','2892','2885','2880','2890','2883'],
+    '生技/醫療': ['1795','6472','6446','6547','6589','4147','4174','4128','4736','4105'],
+    '台股權值百大': ['2330','2317','2454','2382','2881','2412','2882','2308','2891','3711','2002']
+}
+
+# ==========================================
 # 均線最佳化演算法
-# -------------------------------
+# ==========================================
 def find_best_ma_v2(df, start_day, end_day):
     closes = df['Close'].values
     lows = df['Low'].values
@@ -25,10 +37,9 @@ def find_best_ma_v2(df, start_day, end_day):
             best_score = score
             best_ma = ma_len
     return best_ma
-
-# -------------------------------
-# 籌碼模組 (簡化版)
-# -------------------------------
+# ==========================================
+# 籌碼模組 (簡化版 V160)
+# ==========================================
 class ChipCrawlerV160:
     def __init__(self, stock_id, is_otc=False):
         self.stock_id = str(stock_id).strip()
@@ -109,16 +120,24 @@ def analyze_chip_status(m, i, s, trend):
             trend = "💀 雙刀流：空頭警報"
 
     return tags, trend
-
-# -------------------------------
+# ==========================================
 # Streamlit 主介面
-# -------------------------------
+# ==========================================
 st.title("📡 台股強勢股快篩 (V160 均線+籌碼)")
 
-stock_input = st.text_input("輸入股票代號 (空白隔開)", "2330 2454 2603")
+option = st.radio("選擇模式", ["自選股票", "全市場強勢股"])
+
+if option == "自選股票":
+    stock_input = st.text_input("輸入股票代號 (空白隔開)", "2330 2454 2603")
+    stock_list = stock_input.split()
+else:
+    # 全市場強勢股：撈取所有代號
+    all_codes = []
+    for sector in SECTOR_DB.values():
+        all_codes += sector
+    stock_list = list(set(all_codes))
 
 if st.button("開始掃描"):
-    stock_list = stock_input.split()
     tickers = [f"{c}.TW" for c in stock_list]
 
     try:
@@ -145,37 +164,4 @@ if st.button("開始掃描"):
         price = last['Close']
         ms_v = last['MS']
         ml_v = last['ML']
-
-        # 趨勢判斷
-        if price > ms_v and ms_v > ml_v:
-            trend = "🔥 強勢多頭 (抱緊)"
-        elif ms_v >= price >= ml_v:
-            trend = "⚠️ 多頭回檔 (買點)"
-        elif ms_v >= ml_v >= price:
-            trend = "⚡ 跌破防線 (轉弱)"
-        elif price > ms_v and ms_v <= ml_v:
-            trend = "🛡️ 底部反彈 (搶短)"
-        elif ml_v >= ms_v >= price:
-            trend = "❄️ 絕對空頭 (觀望)"
-        else:
-            trend = "🧩 均線糾結 (震盪)"
-
-        # 籌碼分析
-        crawler = ChipCrawlerV160(code)
-        m, i, s = crawler.get_latest_chip_summary(df.index[-1])
-        chip_msg, trend = analyze_chip_status(m, i, s, trend)
-
-        results.append({
-            "代號": code,
-            "現價": f"{price:.1f}",
-            "短均線": f"{ms_v:.1f}",
-            "長均線": f"{ml_v:.1f}",
-            "趨勢判斷": trend,
-            "籌碼分析": chip_msg
-        })
-
-    if results:
-        st.success(f"🎉 共找到 {len(results)} 檔潛力股")
-        st.dataframe(pd.DataFrame(results))
-    else:
-        st.info("💡 今日無符合條件的股票")
+        pct = (price - df['Close
