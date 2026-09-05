@@ -298,15 +298,41 @@ if st.button("開始掃描"):
             prev_p = df_s['Close'].iloc[-2]
             pct_chg = ((last_p - prev_p) / prev_p) * 100
 
-            # 🌐 動態向 Yahoo 抓取股票官方名稱 (無需維護資料庫)
-            try:
-                t_info = yf.Ticker(f"{stock_id}.TW").info
-                s_name = t_info.get('shortName') or t_info.get('longName') or ""
-                # 清理名稱中的多餘後綴 (例如移除 .TW 或 Taiwan)
-                s_name = s_name.replace("TAIWAN SEMICONDUCTOR", "台積電").replace(" LTD", "").strip()
-                display_name = f"{stock_id} {s_name}" if s_name else stock_id
-            except:
-                display_name = stock_id
+# 💡 繁體中文名稱對照表 (常見熱門股 + 電子半導體50強)
+            CN_NAME_MAP = {
+                # 原有熱門指標股
+                "2330": "台積電", "2317": "鴻海", "2454": "聯發科", "2382": "廣達", "3231": "緯創",
+                "2603": "長榮", "2609": "陽明", "2615": "萬海", "1519": "華城", "1504": "東元",
+                "2356": "英業達", "2376": "技嘉", "3037": "欣興", "2303": "聯電", "3711": "日月光投控",
+                "6669": "緯穎", "3661": "世芯-KY", "3443": "創意", "8046": "南電", "3035": "智原",
+                "2881": "富邦金", "2882": "國泰金", "2891": "中信金", "2886": "兆豐金", "2884": "玉山金",
+                "1795": "美時", "6472": "保瑞", "6446": "藥華藥", "2002": "中鋼", "2412": "中華電",
+
+                # ⚡ 新增：電子與半導體熱門50強 (不重複)
+                "2344": "華邦電", "2408": "南亞科", "2337": "旺宏", "2308": "台達電", "2324": "仁寶",
+                "2357": "華碩", "2301": "光寶科", "2377": "微星", "2353": "宏碁", "3008": "大立光",
+                "2327": "國巨", "2492": "華新科", "3034": "聯詠", "2379": "瑞昱", "6531": "愛普*",
+                "3529": "力旺", "6415": "矽力*-KY", "3017": "奇鋐", "3324": "雙鴻", "6230": "超眾",
+                "6274": "台燿", "2383": "台光電", "6213": "聯茂", "3189": "景碩", "2368": "金像電",
+                "2360": "致茂", "6409": "旭隼", "5269": "祥碩", "6643": "M31", "3680": "家登",
+                "3131": "弘塑", "3583": "辛耘", "6187": "萬潤", "2409": "友達", "3481": "群創",
+                "6116": "彩晶", "2340": "台亞", "2374": "佳能", "2354": "鴻準", "2352": "佳世達",
+                "2312": "金寶", "2323": "中洋光", "3702": "大聯大", "3036": "文曄", "2347": "聯強",
+                "2345": "智邦", "5388": "中磊", "6285": "啟碁", "2314": "揚智", "6202": "盛群"
+            }
+
+            # 優先採用中文表，不在表內才向 Yahoo 抓取
+            if stock_id in CN_NAME_MAP:
+                s_name = CN_NAME_MAP[stock_id]
+            else:
+                try:
+                    t_info = yf.Ticker(f"{stock_id}.TW").info
+                    s_name = t_info.get('shortName') or t_info.get('longName') or ""
+                    s_name = s_name.replace(" LTD", "").replace(" CORP", "").strip()
+                except:
+                    s_name = ""
+
+            display_name = f"{stock_id} {s_name}".strip()
             
             # 抓取 5 日籌碼
             crawler = ChipCrawlerV160(stock_id)
@@ -327,22 +353,22 @@ if st.button("開始掃描"):
             else:
                 signal = "🟢 籌碼整理中"
 
-            results.append({
-                "標的": display_name,                 # 顯示如：2330 台積電
+results.append({
+                "標的": display_name,                 # 呈現：2330 台積電
                 "收盤價": f"{last_p:.2f}",
                 "漲跌幅": f"{pct_chg:+.2f}%",
                 "籌碼戰略解讀": signal,
                 "5日外資": f"{f_sum5:+d} 張",
                 "5日投信": f"{t_sum5:+d} 張",
                 "5日融資": f"{m_sum5:+d} 張",
-                "raw_id": stock_id                   # 保留原始股號供產生分頁連結
+                "raw_id": stock_id
             })
         except Exception as e:
             continue
 
     if results:
         res_df = pd.DataFrame(results)
-        # 用隱藏的 raw_id 產生帶參數的分頁網址，隨後移除 raw_id 欄位
+        # 產生帶參數的跳轉連結並隱藏背景 raw_id
         res_df["查看分頁"] = res_df["raw_id"].apply(lambda x: f"?stock={x}")
         res_df = res_df.drop(columns=["raw_id"])
         
