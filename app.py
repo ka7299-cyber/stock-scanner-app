@@ -228,23 +228,70 @@ def show_single_stock_detail(stock_id):
     with cols[3]:
         st.write(f"**借券變化**：{sbl_chg*1000:+d} 張 (餘額: {sbl_bal*1000})")
         
-    # 3. K 線與量能圖表
-    p_df = df.tail(60).copy()
-    p_df.index = p_df.index.strftime('%m-%d')
+# 3. K 線與量能圖表 (參考 Sniper-X-V150 專業設定)
+    # 取最近 120 日資料 (可在 30~240 日間自由調整，例如改 60, 120, 240)
+    p_df = df.tail(120).copy()
     
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.3, 0.7])
+    # 強制將索引轉為標準日期格式，解決 2006/2009 年分顯示異常
+    p_df['Date_Str'] = pd.to_datetime(p_df.index).strftime('%Y-%m-%d')
+    
+    # 建立雙層圖表 (上: K線與均線, 下: 成交量)
+    fig = make_subplots(
+        rows=2, cols=1, 
+        shared_xaxes=True, 
+        vertical_spacing=0.03, 
+        row_width=[0.3, 0.7]
+    )
+    
+    # K 棒繪製
     fig.add_trace(go.Candlestick(
-        x=p_df.index, open=p_df['Open'], high=p_df['High'], low=p_df['Low'], close=p_df['Close'],
-        name='K棒', increasing_line_color='#ef5350', decreasing_line_color='#26a69a'
+        x=p_df['Date_Str'], 
+        open=p_df['Open'], 
+        high=p_df['High'], 
+        low=p_df['Low'], 
+        close=p_df['Close'],
+        name='K棒', 
+        increasing_line_color='#ef5350', 
+        decreasing_line_color='#26a69a'
     ), row=1, col=1)
     
-    fig.add_trace(go.Scatter(x=p_df.index, y=p_df['MS'], mode='lines', name=f'短均({short_ma}日)', line=dict(color='orange', width=1.5)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=p_df.index, y=p_df['ML'], mode='lines', name=f'長均({long_ma}日)', line=dict(color='blue', width=1.5)), row=1, col=1)
+    # 短/長均線繪製
+    fig.add_trace(go.Scatter(
+        x=p_df['Date_Str'], y=p_df['MS'], mode='lines', 
+        name=f'短均({short_ma}日)', line=dict(color='orange', width=1.5)
+    ), row=1, col=1)
     
+    fig.add_trace(go.Scatter(
+        x=p_df['Date_Str'], y=p_df['ML'], mode='lines', 
+        name=f'長均({long_ma}日)', line=dict(color='blue', width=1.5)
+    ), row=1, col=1)
+    
+    # 成交量柱狀圖
     colors = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
-    fig.add_trace(go.Bar(x=p_df.index, y=p_df['Volume'], name='成交量', marker_color=colors), row=2, col=1)
+    fig.add_trace(go.Bar(
+        x=p_df['Date_Str'], y=p_df['Volume'], 
+        name='成交量', marker_color=colors
+    ), row=2, col=1)
     
-    fig.update_layout(xaxis_rangeslider_visible=False, height=500, margin=dict(l=10, r=10, t=30, b=10))
+    # 核心設定 1：強制類別軸 (剔除非交易日/假日中斷) + 貫穿式十字游標
+    fig.update_xaxes(
+        type='category',             # 強制連續，無交易日不留空白
+        spikecolor="gray",          # 游標輔助線顏色
+        spikethickness=1,           # 游標粗細
+        spikemode="across",         # 游標線貫穿上下雙圖表
+        spikesnap="cursor", 
+        showspikes=True             # 開啟貫穿對齊線
+    )
+    
+    # 核心設定 2：隱藏 RangeSlider + 統一 hover 現況資料
+    fig.update_layout(
+        xaxis_rangeslider_visible=False,
+        height=550, 
+        margin=dict(l=10, r=10, t=30, b=10),
+        hovermode="x unified",      # 游標移動時，上方直接統合顯示當天 K 線與成交量數據
+        showlegend=False
+    )
+    
     st.plotly_chart(fig, use_container_width=True)
     
 # ==========================================
