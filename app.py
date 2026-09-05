@@ -286,20 +286,49 @@ if st.button("開始掃描"):
             recent_dates = [d.to_pydatetime().date() for d in df_s.index[-10:]]
             f_sum5, t_sum5, m_sum5 = crawler.get_multi_day_summary(recent_dates, lookback_days=5)
 
-            # 精簡欄位結果
+# ==========================================
+            # 💡 籌碼智能解讀邏輯 (告訴使用者為什麼有機會)
+            # ==========================================
+            if t_sum5 >= 300 and m_sum5 <= 0:
+                signal = "🔥 投信鎖碼 (法人吃貨/散戶退場)"
+            elif f_sum5 >= 1000 and t_sum5 >= 300:
+                signal = "🚀 土洋雙加碼 (主力強勢作多)"
+            elif f_sum5 >= 1500:
+                signal = "💰 外資大掃貨 (外資波段佈局)"
+            elif t_sum5 >= 500:
+                signal = "🎯 投信急買 (波段作多訊號)"
+            elif f_sum5 < -1000 and m_sum5 > 500:
+                signal = "💀 散戶接刀 (法人倒貨/融資暴增)"
+            else:
+                signal = "🟢 籌碼整理中"
+
             results.append({
                 "股號": stock_id,
                 "收盤價": f"{last_p:.2f}",
                 "漲跌幅": f"{pct_chg:+.2f}%",
-                "5日外資(張)": f"{f_sum5:+d}",
-                "5日投信(張)": f"{t_sum5:+d}",
-                "5日融資(張)": f"{m_sum5:+d}",
+                "籌碼戰略解讀": signal,              # 直接告訴使用者強弱與原因
+                "5日外資": f"{f_sum5:+d} 張",
+                "5日投信": f"{t_sum5:+d} 張",
+                "5日融資": f"{m_sum5:+d} 張",
             })
         except Exception as e:
             continue
-
-    if results:
+if results:
         res_df = pd.DataFrame(results)
-        st.dataframe(res_df, use_container_width=True)
+        
+        # 將「股號」直接轉換為可點擊開啟分頁的超連結格式
+        res_df["查看分頁"] = res_df["股號"].apply(lambda x: f"?stock={x}")
+        
+        st.dataframe(
+            res_df,
+            column_config={
+                "查看分頁": st.column_config.LinkColumn(
+                    "詳細圖表",
+                    display_text="📊 開啟 K 線圖"
+                )
+            },
+            use_container_width=True,
+            hide_index=True
+        )
     else:
         st.warning("⚠️ 查無符合條件的股票")
