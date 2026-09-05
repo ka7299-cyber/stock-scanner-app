@@ -269,8 +269,9 @@ def show_single_stock_detail(stock_id):
     # 成交量柱狀圖
     colors = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
     fig.add_trace(go.Bar(
-        x=p_df['Date_Str'], y=p_df['Volume']/ 1000, 
-        name='成交量(張)', marker_color=colors
+        x=p_df['Date_Str'], y=(p_df['Volume'] / 1000).astype(int), 
+        name='成交量(張)', marker_color=colors,
+        hovertemplate='%{y:,} 張'
     ), row=2, col=1)
     
     # 核心設定 1：強制類別軸 (剔除非交易日/假日中斷) + 貫穿式十字游標
@@ -283,15 +284,16 @@ def show_single_stock_detail(stock_id):
         showspikes=True             # 開啟貫穿對齊線
     )
     
-# 核心設定 2：隱藏 RangeSlider + 將 Hover 數據統一顯示在頂部固定抬頭區
+# 核心設定 2：隱藏 RangeSlider + Hover 資訊固定在頂部抬頭
     fig.update_layout(
         xaxis_rangeslider_visible=False,
         height=550, 
         margin=dict(l=10, r=10, t=30, b=10),
-        hovermode="x unified",       # 將開高低收與成交量數據統一顯示在頂部橫條卡片中
+        hovermode="x",              # 改為單軸聯動，資料通常會顯示在圖表頂部抬頭，而非浮動卡片
         hoverlabel=dict(
-            bgcolor="rgba(255, 255, 255, 0.95)", # 白色背景，避免遮擋
-            font_size=12
+            bgcolor="rgba(255, 255, 255, 0.9)", # 白色半透明背景，避免擋住K線
+            font_size=12,
+            align="left"
         ),
         showlegend=False
     )
