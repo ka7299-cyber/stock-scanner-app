@@ -5,6 +5,8 @@ import requests, csv, datetime
 from io import StringIO
 import numpy as np
 from scipy.signal import argrelextrema
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # ==========================================
 # 內建產業板塊資料庫 (取自 V82)
@@ -168,9 +170,91 @@ def analyze_chip_status(m, i, s, trend, vol_ratio=1.0):
             trend = "💀 雙刀流：空頭警報"
 
     return tags, trend
+    
+# ==========================================
+# 參考 Sniper-X 樣式的詳細圖表顯示函式
+# ==========================================
+def show_single_stock_detail(stock_id):
+    st.subheader(f"📊 股票代號：{stock_id} 詳細技術與籌碼分析")
+    
+    # 抓取 K 線行情
+    t_symbol = f"{stock_id}.TW"
+    df = yf.Ticker(t_symbol).history(period="1y")
+    if df.empty:
+        df = yf.Ticker(f"{stock_id}.TWO").history(period="1y")
+        
+    if df.empty:
+        st.error(f"❌ 找不到股票代號 {stock_id} 的數據")
+        return
+
+    # 計算均線
+    custom_cfg = CUSTOM_MA_DB.get(stock_id, {})
+    short_ma = custom_cfg.get('short') or find_best_ma_v2(df, 16, 25)
+    long_ma = custom_cfg.get('long') or find_best_ma_v2(df, 45, 70)
+    
+    df['MS'] = df['Close'].rolling(window=short_ma).mean()
+    df['ML'] = df['Close'].rolling(window=long_ma).mean()
+    
+    # 抓取籌碼
+    crawler = ChipCrawlerV160(stock_id)
+    target_date = df.index[-1].to_pydatetime().date()
+    m, i, s = crawler.get_latest_chip_summary(target_date)
+    
+    last = df.iloc[-1]
+    price = last['Close']
+    ms_v = last['MS']
+    ml_v = last['ML']
+    
+    # 1. 頂部 KPI 卡片
+    c1, c2, c3 = st.columns(3)
+    c1.metric("現價", f"{price:.2f}")
+    c2.metric(f"短均線 ({short_ma}日)", f"{ms_v:.2f}")
+    c3.metric(f"長均線 ({long_ma}日)", f"{ml_v:.2f}")
+    
+    # 2. 當日籌碼數據卡片
+    st.markdown("### 🔍 當日籌碼數據詳情")
+    f_buy = i[0] if i else 0
+    t_buy = i[1] if i else 0
+    m_bal, m_chg = (m[0], m[1]) if m else (0, 0)
+    sbl_bal, sbl_chg = (s[0], s[1]) if s else (0, 0)
+    
+    cols = st.columns(4)
+    with cols[0]:
+        st.write(f"**外資買賣超**：{f_buy*1000:+d} 張")
+    with cols[1]:
+        st.write(f"**投信買賣超**：{t_buy*1000:+d} 張")
+    with cols[2]:
+        st.write(f"**融資變化**：{m_chg:+d} 張 (餘額: {m_bal})")
+    with cols[3]:
+        st.write(f"**借券變化**：{sbl_chg*1000:+d} 張 (餘額: {sbl_bal*1000})")
+        
+    # 3. K 線與量能圖表
+    p_df = df.tail(60).copy()
+    p_df.index = p_df.index.strftime('%m-%d')
+    
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.3, 0.7])
+    fig.add_trace(go.Candlestick(
+        x=p_df.index, open=p_df['Open'], high=p_df['High'], low=p_df['Low'], close=p_df['Close'],
+        name='K棒', increasing_line_color='#ef5350', decreasing_line_color='#26a69a'
+    ), row=1, col=1)
+    
+    fig.add_trace(go.Scatter(x=p_df.index, y=p_df['MS'], mode='lines', name=f'短均({short_ma}日)', line=dict(color='orange', width=1.5)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=p_df.index, y=p_df['ML'], mode='lines', name=f'長均({long_ma}日)', line=dict(color='blue', width=1.5)), row=1, col=1)
+    
+    colors = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
+    fig.add_trace(go.Bar(x=p_df.index, y=p_df['Volume'], name='成交量', marker_color=colors), row=2, col=1)
+    
+    fig.update_layout(xaxis_rangeslider_visible=False, height=500, margin=dict(l=10, r=10, t=30, b=10))
+    st.plotly_chart(fig, use_container_width=True)
+    
 # ==========================================
 # Streamlit 主介面
 # ==========================================
+# 判斷是否網址帶有 stock 參數 (在新分頁開啟時觸發)
+show_stock_id = st.query_params.get("stock")
+if show_stock_id:
+    show_single_stock_detail(show_stock_id)
+    st.stop() # 停止執行下方快篩介面
 st.title("📡 台股強勢股快篩 (V160 均線+籌碼)")
 
 option = st.radio("選擇模式", ["自選股票", "全市場強勢股"])
@@ -259,7 +343,7 @@ if st.button("開始掃描"):
         chip_msg, trend = analyze_chip_status(m, i, s, trend, vol_ratio=vol_ratio)
         
         results.append({
-            "代號": code,
+            "代號": f'<a href="/?stock={code}" target="_blank">{code}</a>',
             "現價": f"{price:.1f}",
             "漲跌": f"{pct:+.1f}%",
             "當日成交量(張)": f"{int(volume_today / 1000):,}",      # 轉為千張/手
@@ -272,8 +356,10 @@ if st.button("開始掃描"):
         })
 
     # 結果輸出
-    if results:
-        st.success(f"🎉 共找到 {len(results)} 檔潛力股")
-        st.dataframe(pd.DataFrame(results))
+if results:
+        st.success(f"🎉 共找到 {len(results)} 檔標的")
+        df_out = pd.DataFrame(results)
+        # 允許 HTML 超連結，讓使用者點擊股號開新分頁
+        st.write(df_out.to_html(escape=False, index=False), unsafe_allow_html=True)
     else:
         st.info("💡 今日無符合條件的股票")
