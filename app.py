@@ -1,4 +1,4 @@
-import streamlit as st
+    import streamlit as st
 import pandas as pd
 import yfinance as yf
 import requests, csv, datetime
@@ -207,7 +207,9 @@ if st.button("開始掃描"):
             trend = "🧩 均線糾結 (震盪)"
 
         crawler = ChipCrawlerV160(code)
-        m, i, s = crawler.get_latest_chip_summary(df.index[-1])
+        # 轉為 Python 標準 date 物件，避開時區與時間字串格式干擾
+        target_date = df.index[-1].to_pydatetime().date()
+        m, i, s = crawler.get_latest_chip_summary(target_date)
         # 帶入 vol_ratio 進行分析
         chip_msg, trend = analyze_chip_status(m, i, s, trend, vol_ratio=vol_ratio)
         
