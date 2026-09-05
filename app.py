@@ -89,7 +89,7 @@ class ChipCrawlerV160:
         except: pass
         return None
 
-def analyze_chip_status(m, i, s, trend):
+def analyze_chip_status(m, i, s, trend, vol_ratio=1.0):
     tags = "🟢 籌碼中性"
     if i and s:
         f_buy = i[0]
@@ -97,6 +97,10 @@ def analyze_chip_status(m, i, s, trend):
         sbl_chg = s[1]
         m_chg = m[1] if m else 0
 
+        if f_buy > 0 and vol_ratio >= 2.0:
+        return "🚀 外資帶量突破", "🔥 強勢多頭 (抱緊)"
+        if t_buy > 0 and vol_ratio >= 2.0:
+        return "🔥 投信帶量鎖股", "🔥 強勢多頭 (抱緊)"
         if f_buy > 0 and sbl_chg < 0:
             tags = "🚀 外資真買"
         elif f_buy > 0 and sbl_chg > 200:
@@ -167,6 +171,27 @@ if st.button("開始掃描"):
         ml_v = last['ML']
         pct = (price - df['Close'].iloc[-2]) / df['Close'].iloc[-2] * 100
 
+       # ========== 新增：成交量計算與比較 ==========
+        volume_today = df['Volume'].iloc[-1]                      # 當日成交量
+        avg_volume_5d = df['Volume'].iloc[-6:-1].mean()          # 前 5 日平均成交量 (不含當日)
+        
+        # 計算爆量比例 (當日量 / 5日均量)
+        vol_ratio = (volume_today / avg_volume_5d) if avg_volume_5d > 0 else 0
+        
+        # 當日量與 5 日均量比較標籤
+        if vol_ratio >= 2.0:
+            vol_status = f"🔥 爆量 ({vol_ratio:.1f}倍)"
+        elif vol_ratio >= 1.2:
+            vol_status = f"📈 增量 ({vol_ratio:.1f}倍)"
+        elif vol_ratio <= 0.7:
+            vol_status = f"📉 縮量 ({vol_ratio:.1f}倍)"
+        else:
+            vol_status = f"➡️ 平量 ({vol_ratio:.1f}倍)"
+        # ============================================
+
+        # 趨勢判斷
+        if price > ms_v and ms_v > ml_v:
+        
         # ★ 全市場強勢股條件：漲幅 >3%
         if option == "全市場強勢股" and pct < 3:
             continue
@@ -185,15 +210,18 @@ if st.button("開始掃描"):
         else:
             trend = "🧩 均線糾結 (震盪)"
 
-        # 籌碼分析
         crawler = ChipCrawlerV160(code)
         m, i, s = crawler.get_latest_chip_summary(df.index[-1])
-        chip_msg, trend = analyze_chip_status(m, i, s, trend)
-
+        # 帶入 vol_ratio 進行分析
+        chip_msg, trend = analyze_chip_status(m, i, s, trend, vol_ratio=vol_ratio)
+        
         results.append({
             "代號": code,
             "現價": f"{price:.1f}",
             "漲跌": f"{pct:+.1f}%",
+            "當日成交量(張)": f"{int(volume_today / 1000):,}",      # 轉為千張/手
+            "5日均量(張)": f"{int(avg_volume_5d / 1000):,}",
+            "成交量變化": vol_status,                             # 觀察比較結果
             "短均線": f"{ms_v:.1f}",
             "長均線": f"{ml_v:.1f}",
             "趨勢判斷": trend,
