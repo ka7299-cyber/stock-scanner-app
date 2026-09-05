@@ -84,7 +84,7 @@ def find_best_ma_v2(df, start_day, end_day):
             best_ma = ma_len
     return best_ma
 # ==========================================
-# 籌碼模組 (簡化版 V160)
+# 籌碼模組 (支援近 5 日累積)
 # ==========================================
 class ChipCrawlerV160:
     def __init__(self, stock_id, is_otc=False):
@@ -97,6 +97,24 @@ class ChipCrawlerV160:
         i = self._get_inst(target_date)
         s = self._get_sbl(target_date)
         return m, i, s
+
+    def get_multi_day_summary(self, dates, lookback_days=5):
+        """抓取近 N 個交易日籌碼並計算累計總和"""
+        f_sum, t_sum, m_sum = 0, 0, 0
+        valid_days = 0
+        for d in reversed(dates):
+            if valid_days >= lookback_days:
+                break
+            i = self._get_inst(d)
+            m = self._get_margin(d)
+            if i or m:
+                valid_days += 1
+                if i:
+                    f_sum += i[0] # 外資
+                    t_sum += i[1] # 投信
+                if m:
+                    m_sum += m[1] # 融資變化
+        return f_sum, t_sum, m_sum
 
     def _get_margin(self, d):
         url = f"https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?date={d.strftime('%Y%m%d')}&selectType=ALL&response=csv"
@@ -135,286 +153,153 @@ class ChipCrawlerV160:
         except: pass
         return None
 
-def analyze_chip_status(m, i, s, trend, vol_ratio=1.0):
-    tags = "🟢 籌碼中性"
-    if i and s:
-        f_buy = i[0]
-        t_buy = i[1]
-        sbl_chg = s[1]
-        m_chg = m[1] if m else 0
-
-        if f_buy > 0 and vol_ratio >= 2.0:
-            return "🚀 外資帶量突破", "🔥 強勢多頭 (抱緊)"
-        if t_buy > 0 and vol_ratio >= 2.0:
-            return "🔥 投信帶量鎖股", "🔥 強勢多頭 (抱緊)"
-        if f_buy > 0 and sbl_chg < 0:
-            tags = "🚀 外資真買"
-        elif f_buy > 0 and sbl_chg > 200:
-            tags = "⚠️ 外資假買"
-        elif t_buy >= 3:
-            tags = f"🔥 投信鎖股"
-        elif f_buy >= 3:
-            tags = f"💰 外資波盤"
-        elif m_chg >= 3 and ("空頭" in trend or "轉弱" in trend):
-            tags = "💀 散戶接刀"
-        elif t_buy > 400:
-            tags = "🚀 投信大買"
-        elif f_buy > 800:
-            tags = "💰 外資敲進"
-        elif m_chg > 400 and f_buy < -400:
-            tags = "📉 主力出貨"
-
-        if ("多頭" in trend or "買點" in trend) and (t_buy > 0 or f_buy > 0) and "假買" not in tags:
-            trend = "🏆 雙刀流：多頭確認"
-        elif ("空頭" in trend or "轉弱" in trend) and (m_chg > 0 or sbl_chg > 0):
-            trend = "💀 雙刀流：空頭警報"
-
-    return tags, trend
-    
 # ==========================================
-# 參考 Sniper-X 樣式的詳細圖表顯示函式
+# 個股詳細圖表顯示函式
 # ==========================================
 def show_single_stock_detail(stock_id):
     st.subheader(f"📊 股票代號：{stock_id} 詳細技術與籌碼分析")
     
-    # 抓取 K 線行情
     t_symbol = f"{stock_id}.TW"
     df = yf.Ticker(t_symbol).history(period="1y")
     if df.empty:
         df = yf.Ticker(f"{stock_id}.TWO").history(period="1y")
-        
-    if df.empty:
-        st.error(f"❌ 找不到股票代號 {stock_id} 的數據")
-        return
+        if df.empty:
+            st.error(f"❌ 找不到股票代號 {stock_id} 的數據")
+            return
 
-    # 計算均線
     custom_cfg = CUSTOM_MA_DB.get(stock_id, {})
     short_ma = custom_cfg.get('short') or find_best_ma_v2(df, 16, 25)
     long_ma = custom_cfg.get('long') or find_best_ma_v2(df, 45, 70)
-    
     df['MS'] = df['Close'].rolling(window=short_ma).mean()
     df['ML'] = df['Close'].rolling(window=long_ma).mean()
-    
-    # 抓取籌碼
+
     crawler = ChipCrawlerV160(stock_id)
-    target_date = df.index[-1].to_pydatetime().date()
-    m, i, s = crawler.get_latest_chip_summary(target_date)
+    recent_dates = [d.to_pydatetime().date() for d in df.index[-10:]]
+    target_date = recent_dates[-1]
     
+    # 抓取單日與近 5 日籌碼
+    m, i, s = crawler.get_latest_chip_summary(target_date)
+    f_sum5, t_sum5, m_sum5 = crawler.get_multi_day_summary(recent_dates, lookback_days=5)
+
     last = df.iloc[-1]
     price = last['Close']
     ms_v = last['MS']
     ml_v = last['ML']
-    
+
     # 1. 頂部 KPI 卡片
     c1, c2, c3 = st.columns(3)
     c1.metric("現價", f"{price:.2f}")
     c2.metric(f"短均線 ({short_ma}日)", f"{ms_v:.2f}")
     c3.metric(f"長均線 ({long_ma}日)", f"{ml_v:.2f}")
-    
-# 2. 當日籌碼數據卡片
-    f_buy = i[0] if i else 0
-    t_buy = i[1] if i else 0
-    m_bal, m_chg = (m[0], m[1]) if m else (0, 0)
-    sbl_bal, sbl_chg = (s[0], s[1]) if s else (0, 0)
 
-    st.markdown("### 🔍 當日籌碼數據詳情")
-
-    cols = st.columns(4)
+    # 2. 近 5 日籌碼累積卡片
+    st.markdown("### 🔍 近 5 日籌碼累積詳情")
+    cols = st.columns(3)
     with cols[0]:
-        st.write(f"**外資買賣超**：{f_buy:+d} 張")
+        st.metric("近 5 日外資累計", f"{f_sum5:+d} 張", delta=f"當日: {i[0]:+d} 張" if i else None)
     with cols[1]:
-        st.write(f"**投信買賣超**：{t_buy:+d} 張")
+        st.metric("近 5 日投信累計", f"{t_sum5:+d} 張", delta=f"當日: {i[1]:+d} 張" if i else None)
     with cols[2]:
-        st.write(f"**融資變化**：{m_chg:+d} 張 (餘額: {m_bal:,})")
-    with cols[3]:
-        st.write(f"**借券變化**：{sbl_chg:+d} 張 (餘額: {sbl_bal:,})")
+        st.metric("近 5 日融資累計", f"{m_sum5:+d} 張", delta=f"當日: {m[1]:+d} 張" if m else None)
 
-    # 3. K 線與量能圖表 (將 Hover 抬頭固定於圖表左上方)
+    # 3. K 線與量能圖表
     p_df = df.tail(120).copy()
     p_df['Date_Str'] = pd.to_datetime(p_df.index).strftime('%Y-%m-%d')
     
-    fig = make_subplots(
-        rows=2, cols=1, 
-        shared_xaxes=True, 
-        vertical_spacing=0.03, 
-        row_width=[0.3, 0.7]
-    )
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.3, 0.7])
     
-    # K 棒繪製：格式化單行抬頭文字
     fig.add_trace(go.Candlestick(
-        x=p_df['Date_Str'], 
-        open=p_df['Open'], 
-        high=p_df['High'], 
-        low=p_df['Low'], 
-        close=p_df['Close'],
-        name='', 
-        increasing_line_color='#ef5350', 
-        decreasing_line_color='#26a69a',
+        x=p_df['Date_Str'], open=p_df['Open'], high=p_df['High'], low=p_df['Low'], close=p_df['Close'],
+        name='', increasing_line_color='#ef5350', decreasing_line_color='#26a69a',
         hovertemplate="%{x} 開:%{open:.1f} 高:%{high:.1f} 低:%{low:.1f} 收:%{close:.1f}<extra></extra>"
     ), row=1, col=1)
     
-    # 短/長均線繪製（關閉均線懸浮）
     fig.add_trace(go.Scatter(
         x=p_df['Date_Str'], y=p_df['MS'], mode='lines', 
-        name=f'短均({short_ma}日)', line=dict(color='orange', width=1.5),
-        hoverinfo='none'
+        name=f'短均({short_ma}日)', line=dict(color='orange', width=1.5), hoverinfo='none'
     ), row=1, col=1)
     
     fig.add_trace(go.Scatter(
         x=p_df['Date_Str'], y=p_df['ML'], mode='lines', 
-        name=f'長均({long_ma}日)', line=dict(color='blue', width=1.5),
-        hoverinfo='none'
+        name=f'長均({long_ma}日)', line=dict(color='blue', width=1.5), hoverinfo='none'
     ), row=1, col=1)
     
-    # 成交量柱狀圖
     colors = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
     fig.add_trace(go.Bar(
         x=p_df['Date_Str'], y=(p_df['Volume'] / 1000).astype(int), 
-        name='', marker_color=colors,
-        hovertemplate="成交量: %{y:,} 張<extra></extra>"
+        name='', marker_color=colors, hovertemplate="成交量: %{y:,} 張<extra></extra>"
     ), row=2, col=1)
     
-    # 十字貫穿對齊線
-    fig.update_xaxes(
-        type='category', 
-        spikecolor="gray", 
-        spikethickness=1, 
-        spikemode="across", 
-        spikesnap="cursor", 
-        showspikes=True
-    )
+    fig.update_xaxes(type='category', spikecolor="gray", spikethickness=1, spikemode="across", spikesnap="cursor", showspikes=True)
     
-    # 核心：使用 unified 模式搭配 namelength=0，將動態文字固定放於左上方抬頭
     fig.update_layout(
-        xaxis_rangeslider_visible=False,
-        height=550, 
-        margin=dict(l=10, r=10, t=30, b=10),
-        hovermode="x unified",            
-        hoverlabel=dict(
-            bgcolor="rgba(255, 255, 255, 0.9)", # 淡白背景抬頭
-            font_size=12,
-            font_color="#000000",
-            namelength=0
-        ),
+        xaxis_rangeslider_visible=False, height=550, margin=dict(l=10, r=10, t=30, b=10),
+        hovermode="x unified",
+        hoverlabel=dict(bgcolor="rgba(255, 255, 255, 0.9)", font_size=12, font_color="#000000", namelength=0),
         showlegend=False
     )
     
     st.plotly_chart(fig, use_container_width=True)
-    
+
 # ==========================================
-# Streamlit 主介面
+# Streamlit 主介面 (精簡掃描列表)
 # ==========================================
-# 判斷是否網址帶有 stock 參數 (在新分頁開啟時觸發)
 show_stock_id = st.query_params.get("stock")
 if show_stock_id:
     show_single_stock_detail(show_stock_id)
-    st.stop() # 停止執行下方快篩介面
-st.title("📡 台股強勢股快篩 (V160 均線+籌碼)")
+    st.stop()
 
+st.title("📡 台股強勢股快篩 (V160 精簡籌碼版)")
 option = st.radio("選擇模式", ["自選股票", "全市場強勢股"])
 
 if option == "自選股票":
     stock_input = st.text_input("輸入股票代號 (空白隔開)", "2330 2454 2603")
     stock_list = stock_input.split()
 else:
-    # 全市場強勢股：撈取所有代號
     all_codes = []
     for sector in SECTOR_DB.values():
         all_codes += sector
     stock_list = list(set(all_codes))
 
-# 初始化 results 變數，確保未按按鈕前不會跳出 NameError
 results = []
-
 if st.button("開始掃描"):
     tickers = [f"{c}.TW" for c in stock_list]
-
     try:
-        data = yf.download(" ".join(tickers), period="6mo", group_by='ticker', auto_adjust=True)
+        data = yf.download(" ".join(tickers), period="3mo", group_by='ticker', auto_adjust=True)
     except Exception as e:
         st.error("❌ 無法下載行情資料，請檢查網路。")
         st.stop()
 
-    for code in stock_list:
-        ticker = f"{code}.TW"
-        if ticker not in data.columns.levels[0]:
-            continue
-        df = data[ticker].dropna()
-        if len(df) < 70: 
-            continue
-
-        # 均線計算 (優先讀取指定參數，若為 None 則自動計算)
-        custom_cfg = CUSTOM_MA_DB.get(code, {})
-        short_ma = custom_cfg.get('short') or find_best_ma_v2(df, 16, 25)
-        long_ma = custom_cfg.get('long') or find_best_ma_v2(df, 45, 70)
-        df['MS'] = df['Close'].rolling(window=short_ma).mean()
-        df['ML'] = df['Close'].rolling(window=long_ma).mean()
-
-        last = df.iloc[-1]
-        price = last['Close']
-        ms_v = last['MS']
-        ml_v = last['ML']
-        pct = (price - df['Close'].iloc[-2]) / df['Close'].iloc[-2] * 100
-
-       # ========== 新增：成交量計算與比較 ==========
-        volume_today = df['Volume'].iloc[-1]                      # 當日成交量
-        avg_volume_5d = df['Volume'].iloc[-6:-1].mean()          # 前 5 日平均成交量 (不含當日)
-        
-        # 計算爆量比例 (當日量 / 5日均量)
-        vol_ratio = (volume_today / avg_volume_5d) if avg_volume_5d > 0 else 0
-        
-        # 當日量與 5 日均量比較標籤
-        if vol_ratio >= 2.0:
-            vol_status = f"🔥 爆量 ({vol_ratio:.1f}倍)"
-        elif vol_ratio >= 1.2:
-            vol_status = f"📈 增量 ({vol_ratio:.1f}倍)"
-        elif vol_ratio <= 0.7:
-            vol_status = f"📉 縮量 ({vol_ratio:.1f}倍)"
-        else:
-            vol_status = f"➡️ 平量 ({vol_ratio:.1f}倍)"
-        # ============================================
-
-        # 趨勢判斷
-        if price > ms_v and ms_v > ml_v:
-            # ★ 全市場強勢股條件：漲幅 >3%
-            if option == "全市場強勢股" and pct < 3:
+    for stock_id in stock_list:
+        try:
+            df_s = data[f"{stock_id}.TW"] if f"{stock_id}.TW" in data else pd.DataFrame()
+            if df_s.empty or df_s['Close'].dropna().empty:
                 continue
-            trend = "🔥 強勢多頭 (抱緊)"
-        elif ms_v >= price >= ml_v:
-            trend = "⚠️ 多頭回檔 (買點)"
-        elif ms_v >= ml_v >= price:
-            trend = "⚡ 跌破防線 (轉弱)"
-        elif price > ms_v and ms_v <= ml_v:
-            trend = "🛡️ 底部反彈 (搶短)"
-        elif ml_v >= ms_v >= price:
-            trend = "❄️ 絕對空頭 (觀望)"
-        else:
-            trend = "🧩 均線糾結 (震盪)"
+            df_s = df_s.dropna(subset=['Close'])
+            
+            last_p = df_s['Close'].iloc[-1]
+            prev_p = df_s['Close'].iloc[-2]
+            pct_chg = ((last_p - prev_p) / prev_p) * 100
 
-        crawler = ChipCrawlerV160(code)
-        # 轉為 Python 標準 date 物件，避開時區與時間字串格式干擾
-        target_date = df.index[-1].to_pydatetime().date()
-        m, i, s = crawler.get_latest_chip_summary(target_date)
-        # 帶入 vol_ratio 進行分析
-        chip_msg, trend = analyze_chip_status(m, i, s, trend, vol_ratio=vol_ratio)
-        
-        results.append({
-            "代號": f'<a href="/?stock={code}" target="_blank">{code}</a>',
-            "現價": f"{price:.1f}",
-            "漲跌": f"{pct:+.1f}%",
-            "當日成交量(張)": f"{int(volume_today / 1000):,}",      # 轉為千張/手
-            "5日均量(張)": f"{int(avg_volume_5d / 1000):,}",
-            "成交量變化": vol_status,                             # 觀察比較結果
-            "短均線": f"{ms_v:.1f}",
-            "長均線": f"{ml_v:.1f}",
-            "趨勢判斷": trend,
-            "籌碼分析": chip_msg
-        })
+            # 抓取 5 日籌碼
+            crawler = ChipCrawlerV160(stock_id)
+            recent_dates = [d.to_pydatetime().date() for d in df_s.index[-10:]]
+            f_sum5, t_sum5, m_sum5 = crawler.get_multi_day_summary(recent_dates, lookback_days=5)
 
-# 結果輸出
-if results:
-    st.success(f"🎉 共找到 {len(results)} 檔標的")
-    df_out = pd.DataFrame(results)
-    st.write(df_out.to_html(escape=False, index=False), unsafe_allow_html=True)
-elif st.session_state.get("scanned", False):  # 避免剛進網頁就顯示警告
-    st.warning("⚠️ 查無符合條件的股票")
+            # 精簡欄位結果
+            results.append({
+                "股號": stock_id,
+                "收盤價": f"{last_p:.2f}",
+                "漲跌幅": f"{pct_chg:+.2f}%",
+                "5日外資(張)": f"{f_sum5:+d}",
+                "5日投信(張)": f"{t_sum5:+d}",
+                "5日融資(張)": f"{m_sum5:+d}",
+            })
+        except Exception as e:
+            continue
+
+    if results:
+        res_df = pd.DataFrame(results)
+        st.dataframe(res_df, use_container_width=True)
+    else:
+        st.warning("⚠️ 查無符合條件的股票")
