@@ -220,13 +220,13 @@ def show_single_stock_detail(stock_id):
     
     cols = st.columns(4)
     with cols[0]:
-        st.write(f"**外資買賣超**：{f_buy*1000:+d} 張")
+        st.write(f"**外資買賣超**：{f_buy:+d} 張")
     with cols[1]:
-        st.write(f"**投信買賣超**：{t_buy*1000:+d} 張")
+        st.write(f"**投信買賣超**：{t_buy:+d} 張")
     with cols[2]:
         st.write(f"**融資變化**：{m_chg:+d} 張 (餘額: {m_bal})")
     with cols[3]:
-        st.write(f"**借券變化**：{sbl_chg*1000:+d} 張 (餘額: {sbl_bal*1000})")
+        st.write(f"**借券變化**：{sbl_chg:+d} 張 (餘額: {sbl_bal*})")
         
 # 3. K 線與量能圖表 (參考 Sniper-X-V150 專業設定)
     # 取最近 120 日資料 (可在 30~240 日間自由調整，例如改 60, 120, 240)
@@ -283,12 +283,17 @@ def show_single_stock_detail(stock_id):
         showspikes=True             # 開啟貫穿對齊線
     )
     
-    # 核心設定 2：隱藏 RangeSlider + 統一 hover 現況資料
+# 核心設定 2：隱藏 RangeSlider + Hover 資訊固定在頂部抬頭
     fig.update_layout(
         xaxis_rangeslider_visible=False,
         height=550, 
         margin=dict(l=10, r=10, t=30, b=10),
-        hovermode="x unified",      # 游標移動時，上方直接統合顯示當天 K 線與成交量數據
+        hovermode="x",              # 改為單軸聯動，將游標懸浮資訊分離
+        hoverlabel=dict(
+            bgcolor="rgba(255, 255, 255, 0.9)", # 設定白色半透明背景
+            font_size=12,
+            align="left"
+        ),
         showlegend=False
     )
     
