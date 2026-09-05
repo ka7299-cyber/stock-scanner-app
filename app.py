@@ -355,10 +355,10 @@ if st.button("開始掃描"):
             "籌碼分析": chip_msg
         })
 
-    # 結果輸出
+# 結果輸出
 if results:
     st.success(f"🎉 共找到 {len(results)} 檔標的")
     df_out = pd.DataFrame(results)
     st.write(df_out.to_html(escape=False, index=False), unsafe_allow_html=True)
-else:
-     st.warning("⚠️ 查無符合條件的股票")
+elif st.session_state.get("scanned", False):  # 避免剛進網頁就顯示警告
+    st.warning("⚠️ 查無符合條件的股票")
