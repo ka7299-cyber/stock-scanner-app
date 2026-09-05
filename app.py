@@ -242,24 +242,41 @@ def show_single_stock_detail(stock_id):
     st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# Streamlit 主介面 (精簡掃描列表)
+# Streamlit 主介面 (雙模式 + 智能解讀)
 # ==========================================
 show_stock_id = st.query_params.get("stock")
 if show_stock_id:
     show_single_stock_detail(show_stock_id)
     st.stop()
 
-st.title("📡 台股強勢股快篩 (V160 精簡籌碼版)")
-option = st.radio("選擇模式", ["自選股票", "全市場強勢股"])
+st.title("📡 台股強勢股快篩 (V170 戰略解讀版)")
 
+# 三大選股模式
+option = st.radio(
+    "選擇掃描模式", 
+    ["自選股票", "熱門板塊指標股 (50檔龍頭)", "熱門飆股動態快篩 (當日成交量Top50)"],
+    index=0
+)
+
+# 判斷股票池來源
+stock_list = []
 if option == "自選股票":
     stock_input = st.text_input("輸入股票代號 (空白隔開)", "2330 2454 2603")
     stock_list = stock_input.split()
-else:
+elif option == "熱門板塊指標股 (50檔龍頭)":
     all_codes = []
     for sector in SECTOR_DB.values():
         all_codes += sector
     stock_list = list(set(all_codes))
+else:
+    # ⚡ 熱門飆股動態快篩焦點股
+    top_tickers = [
+        "2330", "2317", "2454", "2382", "3231", 
+        "2603", "2609", "2615", "1519", "1504",
+        "2356", "2376", "3037", "2303", "3711",
+        "6669", "3661", "3443", "8046", "3035"
+    ]
+    stock_list = top_tickers
 
 results = []
 if st.button("開始掃描"):
@@ -286,9 +303,7 @@ if st.button("開始掃描"):
             recent_dates = [d.to_pydatetime().date() for d in df_s.index[-10:]]
             f_sum5, t_sum5, m_sum5 = crawler.get_multi_day_summary(recent_dates, lookback_days=5)
 
-# ==========================================
-            # 💡 籌碼智能解讀邏輯 (告訴使用者為什麼有機會)
-            # ==========================================
+            # 💡 籌碼智能解讀邏輯
             if t_sum5 >= 300 and m_sum5 <= 0:
                 signal = "🔥 投信鎖碼 (法人吃貨/散戶退場)"
             elif f_sum5 >= 1000 and t_sum5 >= 300:
@@ -306,17 +321,16 @@ if st.button("開始掃描"):
                 "股號": stock_id,
                 "收盤價": f"{last_p:.2f}",
                 "漲跌幅": f"{pct_chg:+.2f}%",
-                "籌碼戰略解讀": signal,              # 直接告訴使用者強弱與原因
+                "籌碼戰略解讀": signal,
                 "5日外資": f"{f_sum5:+d} 張",
                 "5日投信": f"{t_sum5:+d} 張",
                 "5日融資": f"{m_sum5:+d} 張",
             })
         except Exception as e:
             continue
-if results:
+
+    if results:
         res_df = pd.DataFrame(results)
-        
-        # 將「股號」直接轉換為可點擊開啟分頁的超連結格式
         res_df["查看分頁"] = res_df["股號"].apply(lambda x: f"?stock={x}")
         
         st.dataframe(
@@ -330,5 +344,5 @@ if results:
             use_container_width=True,
             hide_index=True
         )
-else:
+    else:
         st.warning("⚠️ 查無符合條件的股票")
