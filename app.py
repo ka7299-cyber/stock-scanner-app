@@ -330,5 +330,5 @@ if results:
             use_container_width=True,
             hide_index=True
         )
-    else:
+else:
         st.warning("⚠️ 查無符合條件的股票")
