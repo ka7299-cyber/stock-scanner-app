@@ -19,6 +19,50 @@ SECTOR_DB = {
 }
 
 # ==========================================
+# 特定股票指定均線對照表 (None 代表自動計算)
+# ==========================================
+CUSTOM_MA_DB = {
+    '1210': {'short': 26, 'long': 48}, '1216': {'short': 26, 'long': None},
+    '1477': {'short': 25, 'long': None}, '1514': {'short': None, 'long': 51},
+    '2006': {'short': 21, 'long': 48}, '2301': {'short': 18, 'long': 53},
+    '2303': {'short': 21, 'long': 48}, '2308': {'short': 27, 'long': 97},
+    '2313': {'short': 20, 'long': 61}, '2317': {'short': 18, 'long': 57},
+    '2324': {'short': 19, 'long': 57}, '2327': {'short': 20, 'long': None},
+    '2330': {'short': 17, 'long': 57}, '2337': {'short': 28, 'long': None},
+    '2344': {'short': 31, 'long': None}, '2345': {'short': 28, 'long': 60},
+    '2352': {'short': 19, 'long': 59}, '2353': {'short': 17, 'long': 63},
+    '2354': {'short': 34, 'long': None}, '2356': {'short': 23, 'long': 58},
+    '2357': {'short': 21, 'long': None}, '2360': {'short': 21, 'long': None},
+    '2362': {'short': 23, 'long': None}, '2368': {'short': 22, 'long': 60},
+    '2376': {'short': None, 'long': 29}, '2377': {'short': 18, 'long': None},
+    '2379': {'short': 26, 'long': None}, '2382': {'short': 23, 'long': 57},
+    '2383': {'short': 18, 'long': 50}, '2385': {'short': 20, 'long': 55},
+    '2395': {'short': 22, 'long': 49}, '2404': {'short': 29, 'long': None},
+    '2408': {'short': 23, 'long': 43}, '2409': {'short': 18, 'long': 52},
+    '2428': {'short': 24, 'long': 59}, '2439': {'short': 18, 'long': 74},
+    '2454': {'short': 29, 'long': 60}, '2472': {'short': 24, 'long': 48},
+    '2496': {'short': 29, 'long': None}, '2603': {'short': 35, 'long': None},
+    '2727': {'short': 28, 'long': 46}, '2753': {'short': 29, 'long': 52},
+    '2755': {'short': 22, 'long': 53}, '2891': {'short': 18, 'long': 47}, 
+    '3005': {'short': 21, 'long': 62}, '3017': {'short': 21, 'long': 55}, 
+    '3029': {'short': 20, 'long': 43}, '3036': {'short': 18, 'long': 53}, 
+    '3130': {'short': 22, 'long': 36}, '3231': {'short': 26, 'long': 76}, 
+    '3443': {'short': 18, 'long': 67}, '3583': {'short': 21, 'long': 50}, 
+    '3706': {'short': 23, 'long': None}, '4987': {'short': 25, 'long': None}, 
+    '5904': {'short': 21, 'long': 57}, '6138': {'short': 21, 'long': None}, 
+    '6146': {'short': 25, 'long': 67}, '6176': {'short': 22, 'long': None}, 
+    '6191': {'short': 25, 'long': None}, '6192': {'short': 29, 'long': None}, 
+    '6197': {'short': 23, 'long': 48}, '6201': {'short': 34, 'long': None}, 
+    '6239': {'short': 23, 'long': 48}, '6279': {'short': 19, 'long': 53}, 
+    '6284': {'short': 24, 'long': 56}, '6285': {'short': 21, 'long': 59}, 
+    '6409': {'short': 23, 'long': 50}, '6667': {'short': 26, 'long': 44}, 
+    '6669': {'short': 28, 'long': 58}, '6721': {'short': 17, 'long': 41}, 
+    '6728': {'short': 30, 'long': 48}, '6805': {'short': 18, 'long': None}, 
+    '8210': {'short': 25, 'long': None}, '8367': {'short': 22, 'long': 55}, 
+    '9939': {'short': 17, 'long': 57}, '1519': {'short': 25, 'long': 45},
+}
+
+# ==========================================
 # 均線最佳化演算法
 # ==========================================
 def find_best_ma_v2(df, start_day, end_day):
@@ -159,9 +203,10 @@ if st.button("開始掃描"):
         if len(df) < 70: 
             continue
 
-        # 均線計算
-        short_ma = find_best_ma_v2(df, 16, 25)
-        long_ma = find_best_ma_v2(df, 45, 70)
+        # 均線計算 (優先讀取指定參數，若為 None 則自動計算)
+        custom_cfg = CUSTOM_MA_DB.get(code, {})
+        short_ma = custom_cfg.get('short') or find_best_ma_v2(df, 16, 25)
+        long_ma = custom_cfg.get('long') or find_best_ma_v2(df, 45, 70)
         df['MS'] = df['Close'].rolling(window=short_ma).mean()
         df['ML'] = df['Close'].rolling(window=long_ma).mean()
 
