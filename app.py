@@ -269,6 +269,9 @@ else:
         all_codes += sector
     stock_list = list(set(all_codes))
 
+# 初始化 results 變數，確保未按按鈕前不會跳出 NameError
+results = []
+
 if st.button("開始掃描"):
     tickers = [f"{c}.TW" for c in stock_list]
 
@@ -278,7 +281,6 @@ if st.button("開始掃描"):
         st.error("❌ 無法下載行情資料，請檢查網路。")
         st.stop()
 
-    results = []
     for code in stock_list:
         ticker = f"{code}.TW"
         if ticker not in data.columns.levels[0]:
