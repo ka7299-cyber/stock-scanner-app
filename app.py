@@ -298,6 +298,16 @@ if st.button("開始掃描"):
             prev_p = df_s['Close'].iloc[-2]
             pct_chg = ((last_p - prev_p) / prev_p) * 100
 
+            # 🌐 動態向 Yahoo 抓取股票官方名稱 (無需維護資料庫)
+            try:
+                t_info = yf.Ticker(f"{stock_id}.TW").info
+                s_name = t_info.get('shortName') or t_info.get('longName') or ""
+                # 清理名稱中的多餘後綴 (例如移除 .TW 或 Taiwan)
+                s_name = s_name.replace("TAIWAN SEMICONDUCTOR", "台積電").replace(" LTD", "").strip()
+                display_name = f"{stock_id} {s_name}" if s_name else stock_id
+            except:
+                display_name = stock_id
+            
             # 抓取 5 日籌碼
             crawler = ChipCrawlerV160(stock_id)
             recent_dates = [d.to_pydatetime().date() for d in df_s.index[-10:]]
@@ -318,20 +328,23 @@ if st.button("開始掃描"):
                 signal = "🟢 籌碼整理中"
 
             results.append({
-                "股號": stock_id,
+                "標的": display_name,                 # 顯示如：2330 台積電
                 "收盤價": f"{last_p:.2f}",
                 "漲跌幅": f"{pct_chg:+.2f}%",
                 "籌碼戰略解讀": signal,
                 "5日外資": f"{f_sum5:+d} 張",
                 "5日投信": f"{t_sum5:+d} 張",
                 "5日融資": f"{m_sum5:+d} 張",
+                "raw_id": stock_id                   # 保留原始股號供產生分頁連結
             })
         except Exception as e:
             continue
 
     if results:
         res_df = pd.DataFrame(results)
-        res_df["查看分頁"] = res_df["股號"].apply(lambda x: f"?stock={x}")
+        # 用隱藏的 raw_id 產生帶參數的分頁網址，隨後移除 raw_id 欄位
+        res_df["查看分頁"] = res_df["raw_id"].apply(lambda x: f"?stock={x}")
+        res_df = res_df.drop(columns=["raw_id"])
         
         st.dataframe(
             res_df,
