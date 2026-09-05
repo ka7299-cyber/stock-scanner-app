@@ -357,9 +357,8 @@ if st.button("開始掃描"):
 
     # 結果輸出
 if results:
-        st.success(f"🎉 共找到 {len(results)} 檔標的")
-        df_out = pd.DataFrame(results)
-        # 允許 HTML 超連結，讓使用者點擊股號開新分頁
-        st.write(df_out.to_html(escape=False, index=False), unsafe_allow_html=True)
-    else:
-        st.info("💡 今日無符合條件的股票")
+    st.success(f"🎉 共找到 {len(results)} 檔標的")
+    df_out = pd.DataFrame(results)
+    st.write(df_out.to_html(escape=False, index=False), unsafe_allow_html=True)
+else:
+     st.warning("⚠️ 查無符合條件的股票")
