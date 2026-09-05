@@ -211,23 +211,14 @@ def show_single_stock_detail(stock_id):
     c2.metric(f"短均線 ({short_ma}日)", f"{ms_v:.2f}")
     c3.metric(f"長均線 ({long_ma}日)", f"{ml_v:.2f}")
     
-# 2. 當日籌碼數據卡片與最新交易日 OHLC 數據抬頭
+# 2. 當日籌碼數據卡片
     f_buy = i[0] if i else 0
     t_buy = i[1] if i else 0
     m_bal, m_chg = (m[0], m[1]) if m else (0, 0)
     sbl_bal, sbl_chg = (s[0], s[1]) if s else (0, 0)
 
-    # 取得最新一日的 K 線價格細節並顯示於頂部
-    if not df.empty:
-        last_candle = df.iloc[-1]
-        last_date_str = pd.to_datetime(df.index[-1]).strftime('%Y-%m-%d')
-        ohlc_info = f"（{last_date_str} 開:{last_candle['Open']:.1f} 高:{last_candle['High']:.1f} 低:{last_candle['Low']:.1f} 收:{last_candle['Close']:.1f}）"
-    else:
-        ohlc_info = ""
+    st.markdown("### 🔍 當日籌碼數據詳情")
 
-    st.markdown(f"### 🔍 當日籌碼數據詳情 <span style='font-size: 15px; color: #666;'>{ohlc_info}</span>", unsafe_allow_html=True)
-
-    # 籌碼卡片 (修正縮排，確保正常顯示於頁面)
     cols = st.columns(4)
     with cols[0]:
         st.write(f"**外資買賣超**：{f_buy:+d} 張")
@@ -238,7 +229,7 @@ def show_single_stock_detail(stock_id):
     with cols[3]:
         st.write(f"**借券變化**：{sbl_chg:+d} 張 (餘額: {sbl_bal:,})")
 
-    # 3. K 線與量能圖表 (徹底關閉畫面浮動視窗)
+    # 3. K 線與量能圖表 (頂部動態抬頭顯示當日數據)
     p_df = df.tail(120).copy()
     p_df['Date_Str'] = pd.to_datetime(p_df.index).strftime('%Y-%m-%d')
     
@@ -249,7 +240,7 @@ def show_single_stock_detail(stock_id):
         row_width=[0.3, 0.7]
     )
     
-    # K 棒繪製（徹底關閉 hoverinfo）
+    # K 棒繪製：設定自訂 hovertemplate，將 OHLC 資料鎖定顯示在頂部，不遮擋 K 棒
     fig.add_trace(go.Candlestick(
         x=p_df['Date_Str'], 
         open=p_df['Open'], 
@@ -259,10 +250,10 @@ def show_single_stock_detail(stock_id):
         name='K棒', 
         increasing_line_color='#ef5350', 
         decreasing_line_color='#26a69a',
-        hoverinfo='none'
+        hovertemplate="<b>%{x}</b> 開:%{open:.1f} 高:%{high:.1f} 低:%{low:.1f} 收:%{close:.1f}<extra></extra>"
     ), row=1, col=1)
     
-    # 短/長均線繪製（徹底關閉 hoverinfo）
+    # 短/長均線繪製（停用均線懸浮框，減少干擾）
     fig.add_trace(go.Scatter(
         x=p_df['Date_Str'], y=p_df['MS'], mode='lines', 
         name=f'短均({short_ma}日)', line=dict(color='orange', width=1.5),
@@ -275,15 +266,15 @@ def show_single_stock_detail(stock_id):
         hoverinfo='none'
     ), row=1, col=1)
     
-    # 成交量柱狀圖（徹底關閉 hoverinfo）
+    # 成交量柱狀圖
     colors = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
     fig.add_trace(go.Bar(
         x=p_df['Date_Str'], y=(p_df['Volume'] / 1000).astype(int), 
         name='成交量(張)', marker_color=colors,
-        hoverinfo='none'
+        hovertemplate="量: %{y:,} 張<extra></extra>"
     ), row=2, col=1)
     
-    # 十字貫穿對齊線設定
+    # 十字貫穿游標與 Y 軸對齊
     fig.update_xaxes(
         type='category', 
         spikecolor="gray", 
@@ -293,12 +284,18 @@ def show_single_stock_detail(stock_id):
         showspikes=True
     )
     
-    # 關閉所有浮動視窗，畫面保持全清爽
+    # Layout 設定：將 hover 抬頭樣式固定在左上方空白處
     fig.update_layout(
         xaxis_rangeslider_visible=False,
         height=550, 
         margin=dict(l=10, r=10, t=10, b=10),
-        hovermode=False,               # 完全關閉懸浮卡片觸發機制
+        hovermode="x",                  # 啟用 X 軸十字游標與連動
+        hoverlabel=dict(
+            bgcolor="rgba(255, 255, 255, 0.9)", # 白色透明背景
+            font_size=13,
+            font_color="#333333",
+            align="left"
+        ),
         showlegend=False
     )
     
