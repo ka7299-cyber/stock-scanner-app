@@ -191,13 +191,9 @@ if st.button("開始掃描"):
 
         # 趨勢判斷
         if price > ms_v and ms_v > ml_v:
-        
-        # ★ 全市場強勢股條件：漲幅 >3%
-        if option == "全市場強勢股" and pct < 3:
-            continue
-
-        # 趨勢判斷
-        if price > ms_v and ms_v > ml_v:
+            # ★ 全市場強勢股條件：漲幅 >3%
+            if option == "全市場強勢股" and pct < 3:
+                continue
             trend = "🔥 強勢多頭 (抱緊)"
         elif ms_v >= price >= ml_v:
             trend = "⚠️ 多頭回檔 (買點)"
