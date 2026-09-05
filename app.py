@@ -229,7 +229,7 @@ def show_single_stock_detail(stock_id):
     with cols[3]:
         st.write(f"**借券變化**：{sbl_chg:+d} 張 (餘額: {sbl_bal:,})")
 
-    # 3. K 線與量能圖表 (頂部動態抬頭顯示當日數據)
+    # 3. K 線與量能圖表 (固定於頂部抬頭顯示動態數據)
     p_df = df.tail(120).copy()
     p_df['Date_Str'] = pd.to_datetime(p_df.index).strftime('%Y-%m-%d')
     
@@ -240,20 +240,20 @@ def show_single_stock_detail(stock_id):
         row_width=[0.3, 0.7]
     )
     
-    # K 棒繪製：設定自訂 hovertemplate，將 OHLC 資料鎖定顯示在頂部，不遮擋 K 棒
+    # K 棒繪製：設定簡潔單行的抬頭格式
     fig.add_trace(go.Candlestick(
         x=p_df['Date_Str'], 
         open=p_df['Open'], 
         high=p_df['High'], 
         low=p_df['Low'], 
         close=p_df['Close'],
-        name='K棒', 
+        name='', 
         increasing_line_color='#ef5350', 
         decreasing_line_color='#26a69a',
-        hovertemplate="<b>%{x}</b> 開:%{open:.1f} 高:%{high:.1f} 低:%{low:.1f} 收:%{close:.1f}<extra></extra>"
+        hovertemplate="%{x} 開:%{open:.1f} 高:%{high:.1f} 低:%{low:.1f} 收:%{close:.1f}<extra></extra>"
     ), row=1, col=1)
     
-    # 短/長均線繪製（停用均線懸浮框，減少干擾）
+    # 短/長均線繪製（關閉均線 Hover，避免資料過於雜亂）
     fig.add_trace(go.Scatter(
         x=p_df['Date_Str'], y=p_df['MS'], mode='lines', 
         name=f'短均({short_ma}日)', line=dict(color='orange', width=1.5),
@@ -270,11 +270,11 @@ def show_single_stock_detail(stock_id):
     colors = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
     fig.add_trace(go.Bar(
         x=p_df['Date_Str'], y=(p_df['Volume'] / 1000).astype(int), 
-        name='成交量(張)', marker_color=colors,
-        hovertemplate="量: %{y:,} 張<extra></extra>"
+        name='', marker_color=colors,
+        hovertemplate="成交量: %{y:,} 張<extra></extra>"
     ), row=2, col=1)
     
-    # 十字貫穿游標與 Y 軸對齊
+    # 十字貫穿對齊線
     fig.update_xaxes(
         type='category', 
         spikecolor="gray", 
@@ -284,17 +284,17 @@ def show_single_stock_detail(stock_id):
         showspikes=True
     )
     
-    # Layout 設定：將 hover 抬頭樣式固定在左上方空白處
+    # 將 Hover 標籤強制固定鎖定在圖表最頂端抬頭位置（不跟隨游標在 K 棒旁浮動）
     fig.update_layout(
         xaxis_rangeslider_visible=False,
         height=550, 
-        margin=dict(l=10, r=10, t=10, b=10),
-        hovermode="x",                  # 啟用 X 軸十字游標與連動
+        margin=dict(l=10, r=10, t=30, b=10),
+        hovermode="x unified",            # unified 模式會將資訊集中放於圖表頂部抬頭區
         hoverlabel=dict(
-            bgcolor="rgba(255, 255, 255, 0.9)", # 白色透明背景
-            font_size=13,
-            font_color="#333333",
-            align="left"
+            bgcolor="rgba(255, 255, 255, 0.85)", # 淡色半透明背景
+            font_size=12,
+            font_color="#000000",
+            namelength=0                  # 清除多餘前綴名稱
         ),
         showlegend=False
     )
