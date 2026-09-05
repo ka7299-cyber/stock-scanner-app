@@ -98,9 +98,9 @@ def analyze_chip_status(m, i, s, trend, vol_ratio=1.0):
         m_chg = m[1] if m else 0
 
         if f_buy > 0 and vol_ratio >= 2.0:
-        return "🚀 外資帶量突破", "🔥 強勢多頭 (抱緊)"
+            return "🚀 外資帶量突破", "🔥 強勢多頭 (抱緊)"
         if t_buy > 0 and vol_ratio >= 2.0:
-        return "🔥 投信帶量鎖股", "🔥 強勢多頭 (抱緊)"
+            return "🔥 投信帶量鎖股", "🔥 強勢多頭 (抱緊)"
         if f_buy > 0 and sbl_chg < 0:
             tags = "🚀 外資真買"
         elif f_buy > 0 and sbl_chg > 200:
