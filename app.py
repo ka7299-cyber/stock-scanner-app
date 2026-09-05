@@ -226,7 +226,7 @@ def show_single_stock_detail(stock_id):
     with cols[2]:
         st.write(f"**融資變化**：{m_chg:+d} 張 (餘額: {m_bal})")
     with cols[3]:
-        st.write(f"**借券變化**：{sbl_chg:+d} 張 (餘額: {sbl_bal*})")
+        st.write(f"**借券變化**：{sbl_chg:+d} 張 (餘額: {sbl_bal:,})")
         
 # 3. K 線與量能圖表 (參考 Sniper-X-V150 專業設定)
     # 取最近 120 日資料 (可在 30~240 日間自由調整，例如改 60, 120, 240)
