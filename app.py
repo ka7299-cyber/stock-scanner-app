@@ -286,7 +286,7 @@ def show_single_stock_detail(stock_id):
     with cols[2]:
         st.metric("近 5 日融資累計", f"{m_sum5:+d} 張", delta=f"當日: {m[1]:+d} 張" if m else None)
 
-try:
+    try:
         p_short, p_long = TW_STRATEGIES.get(stock_id, (None, None))
     except NameError:
         p_short, p_long = None, None  # 防止您的檔案沒設定 TW_STRATEGIES 字典報錯
