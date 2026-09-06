@@ -20,6 +20,25 @@ SECTOR_DB = {
     '台股權值百大': ['2330','2317','2454','2382','2881','2412','2882','2308','2891','3711','2002']
 }
 
+CN_NAME_MAP = {
+    "2330": "台積電", "2317": "鴻海", "2454": "聯發科", "2382": "廣達", "3231": "緯創",
+    "2603": "長榮", "2609": "陽明", "2615": "萬海", "1519": "華城", "1504": "東元",
+    "2356": "英業達", "2376": "技嘉", "3037": "欣興", "2303": "聯電", "3711": "日月光投控",
+    "6669": "緯穎", "3661": "世芯-KY", "3443": "創意", "8046": "南電", "3035": "智原",
+    "2881": "富邦金", "2882": "國泰金", "2891": "中信金", "2886": "兆豐金", "2884": "玉山金",
+    "1795": "美時", "6472": "保瑞", "6446": "藥華藥", "2002": "中鋼", "2412": "中華電",
+    "2344": "華邦電", "2408": "南亞科", "2337": "旺宏", "2308": "台達電", "2324": "仁寶",
+    "2357": "華碩", "2301": "光寶科", "2377": "微星", "2353": "宏碁", "3008": "大立光",
+    "2327": "國巨", "2492": "華新科", "3034": "聯詠", "2379": "瑞昱", "6531": "愛普*",
+    "3529": "力旺", "6415": "矽力*-KY", "3017": "奇鋐", "3324": "雙鴻", "6230": "超眾",
+    "6274": "台燿", "2383": "台光電", "6213": "聯茂", "3189": "景碩", "2368": "金像電",
+    "2360": "致茂", "6409": "旭隼", "5269": "祥碩", "6643": "M31", "3680": "家登",
+    "3131": "弘塑", "3583": "辛耘", "6187": "萬潤", "2409": "友達", "3481": "群創",
+    "6116": "彩晶", "2340": "台亞", "2374": "佳能", "2354": "鴻準", "2352": "佳世達",
+    "2312": "金寶", "2323": "中洋光", "3702": "大聯大", "3036": "文曄", "2347": "聯強",
+    "2345": "智邦", "5388": "中磊", "6285": "啟碁", "2314": "揚智", "6202": "盛群"
+}
+
 # ==========================================
 # 特定股票指定均線對照表 (None 代表自動計算)
 # ==========================================
@@ -157,15 +176,28 @@ class ChipCrawlerV160:
 # 個股詳細圖表顯示函式
 # ==========================================
 def show_single_stock_detail(stock_id):
-    st.subheader(f"📊 股票代號：{stock_id} 詳細技術與籌碼分析")
+    # 優先讀取網址傳遞過來的名稱，若無則對照全域 CN_NAME_MAP
+    custom_name = st.query_params.get("name")
+    if custom_name:
+        stock_name = custom_name
+    elif stock_id in CN_NAME_MAP:
+        stock_name = f"{stock_id} {CN_NAME_MAP[stock_id]}"
+    else:
+        try:
+            t_info = yf.Ticker(f"{stock_id}.TW").info
+            s_name = t_info.get('shortName') or t_info.get('longName') or ""
+            s_name = s_name.replace(" LTD", "").replace(" CORP", "").strip()
+            stock_name = f"{stock_id} {s_name}".strip()
+        except:
+            stock_name = stock_id
+
+    st.subheader(f"📊 股票代號：{stock_name} 詳細技術與籌碼分析")
     
-    t_symbol = f"{stock_id}.TW"
-    df = yf.Ticker(t_symbol).history(period="1y")
+    # 下載該股歷史 K 線資料
+    df = yf.download(f"{stock_id}.TW", period="6mo", auto_adjust=True)
     if df.empty:
-        df = yf.Ticker(f"{stock_id}.TWO").history(period="1y")
-        if df.empty:
-            st.error(f"❌ 找不到股票代號 {stock_id} 的數據")
-            return
+        st.error(f"❌ 查無代號 {stock_id} 的行情資料，請確認股號是否正確。")
+        return
 
     custom_cfg = CUSTOM_MA_DB.get(stock_id, {})
     short_ma = custom_cfg.get('short') or find_best_ma_v2(df, 16, 25)
@@ -367,8 +399,8 @@ if st.button("開始掃描"):
 
     if results:
         res_df = pd.DataFrame(results)
-        # 產生帶參數的跳轉連結並隱藏背景 raw_id
-        res_df["查看分頁"] = res_df["raw_id"].apply(lambda x: f"?stock={x}")
+        # 💡 將 raw_id 與 標的 名稱順便帶入網址網址 (?stock=2330&name=2330 台積電)
+        res_df["查看分頁"] = res_df.apply(lambda row: f"?stock={row['raw_id']}&name={row['標的']}", axis=1)
         res_df = res_df.drop(columns=["raw_id"])
         
         st.dataframe(
