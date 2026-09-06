@@ -103,6 +103,35 @@ def find_best_ma_v2(df, start_day, end_day):
             best_ma = ma_len
     return best_ma
 
+def find_best_ma_golden_bluff_v2(df, start_day, end_day):
+    closes = df['Close'].values; lows = df['Low'].values; highs = df['High'].values
+    n = len(df)
+    best_ma = start_day; best_score = -np.inf
+    fib_nums = {21, 34, 55, 89}
+    for ma_len in range(start_day, end_day + 1):
+        ma_series = df['Close'].rolling(window=ma_len).mean()
+        ma_values = ma_series.values
+        if n < ma_len + 10: continue
+        valid_idx = slice(ma_len, n)
+        l_slice = lows[valid_idx]; h_slice = highs[valid_idx]; ma_slice = ma_values[valid_idx]
+        min_idxs = argrelextrema(l_slice, np.less, order=3)[0]
+        max_idxs = argrelextrema(h_slice, np.greater, order=3)[0]
+        total_error = 0; point_count = 0
+        if len(min_idxs) > 0:
+            total_error += (np.abs(l_slice[min_idxs] - ma_slice[min_idxs]) / ma_slice[min_idxs]).sum()
+            point_count += len(min_idxs)
+        if len(max_idxs) > 0:
+            total_error += (np.abs(h_slice[max_idxs] - ma_slice[max_idxs]) / ma_slice[max_idxs]).sum()
+            point_count += len(max_idxs)
+        avg_error = (total_error / point_count) if point_count > 0 else 0.05
+        score = 100 - (avg_error * 3000) + (ma_len - start_day) * 0.8
+        cross_mask = (closes[valid_idx] > ma_slice) ^ (np.roll(closes[valid_idx], 1) > np.roll(ma_slice, 1))
+        if np.sum(cross_mask[1:]) / (len(ma_slice) / 20.0) > 3.0: score -= 100
+        if ma_len in fib_nums: score += 10
+        if score > best_score:
+            best_score = score; best_ma = ma_len
+    return best_ma
+
 # ==========================================
 # 籌碼模組 (支援近 5 日累積)
 # ==========================================
@@ -119,7 +148,6 @@ class ChipCrawlerV160:
         return m, i, s
 
     def get_multi_day_summary(self, dates, lookback_days=5):
-        """抓取近 N 個交易日籌碼並計算累計總和"""
         f_sum, t_sum, m_sum = 0, 0, 0
         valid_days = 0
         for d in reversed(dates):
@@ -130,10 +158,10 @@ class ChipCrawlerV160:
             if i or m:
                 valid_days += 1
                 if i:
-                    f_sum += i[0] # 外資
-                    t_sum += i[1] # 投信
+                    f_sum += i[0]
+                    t_sum += i[1]
                 if m:
-                    m_sum += m[1] # 融資變化
+                    m_sum += m[1]
         return f_sum, t_sum, m_sum
 
     def _get_margin(self, d):
@@ -174,60 +202,35 @@ class ChipCrawlerV160:
         return None
 
 # ==========================================
-# 個股詳細圖表顯示函式
+# 個股詳細圖表顯示函式 (強效修正 DataFrame 結構)
 # ==========================================
-def find_best_ma_golden_bluff_v2(df, start_day, end_day):
-    closes = df['Close'].values; lows = df['Low'].values; highs = df['High'].values
-    n = len(df)
-    best_ma = start_day; best_score = -np.inf
-    fib_nums = {21, 34, 55, 89}
-    for ma_len in range(start_day, end_day + 1):
-        ma_series = df['Close'].rolling(window=ma_len).mean()
-        ma_values = ma_series.values
-        if n < ma_len + 10: continue
-        valid_idx = slice(ma_len, n)
-        l_slice = lows[valid_idx]; h_slice = highs[valid_idx]; ma_slice = ma_values[valid_idx]
-        min_idxs = argrelextrema(l_slice, np.less, order=3)[0]
-        max_idxs = argrelextrema(h_slice, np.greater, order=3)[0]
-        total_error = 0; point_count = 0
-        if len(min_idxs) > 0:
-            total_error += (np.abs(l_slice[min_idxs] - ma_slice[min_idxs]) / ma_slice[min_idxs]).sum()
-            point_count += len(min_idxs)
-        if len(max_idxs) > 0:
-            total_error += (np.abs(h_slice[max_idxs] - ma_slice[max_idxs]) / ma_slice[max_idxs]).sum()
-            point_count += len(max_idxs)
-        avg_error = (total_error / point_count) if point_count > 0 else 0.05
-        score = 100 - (avg_error * 3000) + (ma_len - start_day) * 0.8
-        cross_mask = (closes[valid_idx] > ma_slice) ^ (np.roll(closes[valid_idx], 1) > np.roll(ma_slice, 1))
-        if np.sum(cross_mask[1:]) / (len(ma_slice) / 20.0) > 3.0: score -= 100
-        if ma_len in fib_nums: score += 10
-        if score > best_score:
-            best_score = score; best_ma = ma_len
-    return best_ma
-
 def show_single_stock_detail(stock_id):
-    # 優先讀取網址傳遞過來的名稱，若無則對照全域 CN_NAME_MAP
     custom_name = st.query_params.get("name")
     if custom_name:
         stock_name = custom_name
     elif stock_id in CN_NAME_MAP:
         stock_name = f"{stock_id} {CN_NAME_MAP[stock_id]}"
     else:
-        try:
-            t_info = yf.Ticker(f"{stock_id}.TW").info
-            s_name = t_info.get('shortName') or t_info.get('longName') or ""
-            s_name = s_name.replace(" LTD", "").replace(" CORP", "").strip()
-            stock_name = f"{stock_id} {s_name}".strip()
-        except:
-            stock_name = stock_id
+        stock_name = stock_id
 
     st.subheader(f"📊 股票代號：{stock_name} 詳細技術與籌碼分析")
     
-    # 下載該股歷史 K 線資料
+    # 下載歷史資料
     df = yf.download(f"{stock_id}.TW", period="6mo", auto_adjust=True)
     if df.empty:
         st.error(f"❌ 查無代號 {stock_id} 的行情資料，請確認股號是否正確。")
         return
+
+    # 【關鍵修復】打平 yfinance 傳回來的 MultiIndex 雙層欄位
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
+    # 確保數值轉為純 1D 系列
+    df['Open'] = pd.to_numeric(df['Open'].squeeze(), errors='coerce')
+    df['High'] = pd.to_numeric(df['High'].squeeze(), errors='coerce')
+    df['Low'] = pd.to_numeric(df['Low'].squeeze(), errors='coerce')
+    df['Close'] = pd.to_numeric(df['Close'].squeeze(), errors='coerce')
+    df['Volume'] = pd.to_numeric(df['Volume'].squeeze(), errors='coerce')
 
     custom_cfg = CUSTOM_MA_DB.get(stock_id, {})
     short_ma = custom_cfg.get('short') or find_best_ma_v2(df, 16, 25)
@@ -239,28 +242,19 @@ def show_single_stock_detail(stock_id):
     recent_dates = [d.to_pydatetime().date() for d in df.index[-10:]]
     target_date = recent_dates[-1]
     
-    # 抓取單日與近 5 日籌碼
     m, i, s = crawler.get_latest_chip_summary(target_date)
     f_sum5, t_sum5, m_sum5 = crawler.get_multi_day_summary(recent_dates, lookback_days=5)
 
-    try:
-        close_series = df['Close']
-        if isinstance(close_series, pd.DataFrame):
-            close_series = close_series.iloc[:, 0]
-            
-        price = float(close_series.iloc[-1])
-        prev_price = float(close_series.iloc[-2]) if len(close_series) > 1 else price
-        change = price - prev_price
-        pct_change = (change / prev_price * 100) if prev_price != 0 else 0.0
-    except Exception as e:
-        price = prev_price = change = pct_change = 0.0
+    price = float(df['Close'].iloc[-1])
+    prev_price = float(df['Close'].iloc[-2]) if len(df) > 1 else price
+    change = price - prev_price
+    pct_change = (change / prev_price * 100) if prev_price != 0 else 0.0
 
     c1, c2, c3 = st.columns(3)
     c1.metric("現價", f"{price:.2f}")
     c2.metric("漲跌", f"{change:+.2f}")
     c3.metric("漲跌幅", f"{pct_change:+.2f}%")
 
-    # 近 5 日籌碼累積卡片
     st.markdown("### 🔍 近 5 日籌碼累積詳情")
     cols = st.columns(3)
     with cols[0]:
@@ -270,16 +264,24 @@ def show_single_stock_detail(stock_id):
     with cols[2]:
         st.metric("近 5 日融資累計", f"{m_sum5:+d} 張", delta=f"當日: {m[1]:+d} 張" if m else None)
 
-    # K 線與量能圖表（以解開繪圖衝突）
+    # 取最近 120 根 K 線畫圖
     p_df = df.tail(120).copy()
     
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.02, row_heights=[0.7, 0.3])
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.75, 0.25])
 
+    # K 棒繪製
     fig.add_trace(go.Candlestick(
-        x=p_df.index, open=p_df['Open'], high=p_df['High'], low=p_df['Low'], close=p_df['Close'],
-        name='K棒', increasing_line_color='#ef5350', decreasing_line_color='#26a69a'
+        x=p_df.index,
+        open=p_df['Open'],
+        high=p_df['High'],
+        low=p_df['Low'],
+        close=p_df['Close'],
+        name='K棒',
+        increasing_line_color='#ef5350',
+        decreasing_line_color='#26a69a'
     ), row=1, col=1)
     
+    # 均線繪製
     fig.add_trace(go.Scatter(
         x=p_df.index, y=p_df['MS'], mode='lines', 
         name=f'短均({short_ma}日)', line=dict(color='#ff9800', width=1.5)
@@ -290,36 +292,27 @@ def show_single_stock_detail(stock_id):
         name=f'長均({long_ma}日)', line=dict(color='#9c27b0', width=1.5)
     ), row=1, col=1)
     
+    # 成交量柱狀圖繪製
     v_cols = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
     fig.add_trace(go.Bar(
         x=p_df.index, y=p_df['Volume'], 
-        name='量', marker_color=v_cols
+        name='成交量', marker_color=v_cols
     ), row=2, col=1)
-    
-    fig.update_xaxes(
-        spikecolor="gray",
-        spikethickness=1,
-        spikemode="across",
-        spikesnap="cursor",
-        showspikes=True
-    )
     
     fig.update_layout(
         height=550,
         template="plotly_white",
         xaxis_rangeslider_visible=False,
-        showlegend=False,
+        showlegend=True,
         margin=dict(l=10, r=10, t=30, b=10),
-        hovermode="x unified",
-        hoverlabel=dict(bgcolor="rgba(255, 255, 255, 0.9)", font_size=12, font_color="#000000", namelength=0),
-        dragmode=False
+        hovermode="x unified"
     )
     fig.update_yaxes(side="right")
     
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# Streamlit 主介面 (雙模式 + 智能解讀)
+# Streamlit 主介面
 # ==========================================
 show_stock_id = st.query_params.get("stock")
 if show_stock_id:
@@ -336,7 +329,7 @@ option = st.radio(
 
 stock_list = []
 if option == "自選股票":
-    stock_input = st.text_input("輸入股票代號 (空白隔開)", "2330 2454 2603")
+    stock_input = st.text_input("輸入股票代號 (空白隔開)", "2330 2454 2603 2313")
     stock_list = stock_input.split()
 elif option == "熱門板塊指標股 (50檔龍頭)":
     all_codes = []
@@ -363,24 +356,22 @@ if st.button("開始掃描"):
 
     for stock_id in stock_list:
         try:
-            df_s = data[f"{stock_id}.TW"] if f"{stock_id}.TW" in data else pd.DataFrame()
+            df_s = data[f"{stock_id}.TW"].copy() if f"{stock_id}.TW" in data else pd.DataFrame()
+            if isinstance(df_s.columns, pd.MultiIndex):
+                df_s.columns = df_s.columns.get_level_values(0)
+                
             if df_s.empty or df_s['Close'].dropna().empty:
                 continue
             df_s = df_s.dropna(subset=['Close'])
             
-            last_p = df_s['Close'].iloc[-1]
-            prev_p = df_s['Close'].iloc[-2]
+            last_p = float(df_s['Close'].iloc[-1])
+            prev_p = float(df_s['Close'].iloc[-2])
             pct_chg = ((last_p - prev_p) / prev_p) * 100
 
             if stock_id in CN_NAME_MAP:
                 s_name = CN_NAME_MAP[stock_id]
             else:
-                try:
-                    t_info = yf.Ticker(f"{stock_id}.TW").info
-                    s_name = t_info.get('shortName') or t_info.get('longName') or ""
-                    s_name = s_name.replace(" LTD", "").replace(" CORP", "").strip()
-                except:
-                    s_name = ""
+                s_name = ""
 
             display_name = f"{stock_id} {s_name}".strip()
 
