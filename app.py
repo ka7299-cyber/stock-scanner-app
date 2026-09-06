@@ -311,6 +311,94 @@ def show_single_stock_detail(stock_id):
     
     st.plotly_chart(fig, use_container_width=True)
 
+    # =================================================================
+    # ⭐ 新增：個股專屬戰術指南 (動態分析本檔股票)
+    # =================================================================
+    st.divider()
+    st.subheader(f"💡 {stock_name} 專屬持股戰術指南")
+    
+    # 1. 計算這檔股票最新的均線狀態
+    s_ma_val = p_df['MS'].iloc[-1]
+    l_ma_val = p_df['ML'].iloc[-1]
+    
+    ma_diff = abs(s_ma_val - l_ma_val) / l_ma_val
+    if ma_diff < 0.025: # 短長均線差距 2.5% 以內視為糾結
+        ma_state = "糾結"
+    elif (price > s_ma_val) and (s_ma_val > l_ma_val):
+        ma_state = "多頭"
+    else:
+        ma_state = "空頭"
+        
+    # 2. 依據真實籌碼數據判定訊號
+    if t_sum5 > 0 and f_sum5 > 0:
+        signal = "🚀 土洋雙加碼"
+    elif t_sum5 > 0:
+        signal = "🔥 投信鎖碼"
+    elif f_sum5 > 500:
+        signal = "💰 外資大掃貨"
+    elif m_sum5 > 0 and (f_sum5 < 0 or t_sum5 < 0):
+        signal = "💀 散戶接刀"
+    else:
+        if pct_change >= 2:
+            signal = "🔥 買盤進駐"
+        elif pct_change <= -2:
+            signal = "💀 賣壓沉重"
+        else:
+            signal = "🟢 籌碼整理"
+
+    # 3. 顯示目前偵測到的狀態
+    st.markdown(f"**目前偵測型態：** 均線 `{ma_state}` ｜ 籌碼 `{signal}`")
+    
+    # 4. 讓使用者點選持股情境
+    user_status = st.radio(
+        "請選擇您目前對本檔股票的狀態：",
+        ["🛒 未購入 (評估進場)", "📈 已持股 (帳面獲利中)", "📉 已持股 (帳面套牢中)"],
+        horizontal=True,
+        key=f"status_{stock_id}"
+    )
+    
+    # 5. 依據選擇與股票狀態給予專屬提示
+    action_tip = ""
+    desc = ""
+    
+    if user_status == "🛒 未購入 (評估進場)":
+        if signal in ["🚀 土洋雙加碼", "🔥 投信鎖碼", "💰 外資大掃貨", "🔥 買盤進駐"]:
+            if ma_state == "多頭":
+                action_tip, desc = "🔥 突破追漲", "極強順勢型態，適合分批追價，沿短均線持有。"
+            elif ma_state == "糾結":
+                action_tip, desc = "👀 潛伏卡位", "爆發前夕卡位點，盈虧比極佳，帶量突破可加碼。"
+            else:
+                action_tip, desc = "🌱 低檔試探", "左側交易抄底，建議小資金試水溫，嚴守前低停損。"
+        elif "接刀" in signal or "賣壓" in signal:
+            action_tip, desc = "🚨 觀望避開", "籌碼極差，縱使下跌也不可入場接刀。"
+        else:
+            if ma_state == "多頭":
+                action_tip, desc = "📈 技術偏多", "籌碼雖不明顯，但技術面強勢，可拉回短均買進。"
+            else:
+                action_tip, desc = "⏳ 觀望待變", "籌碼與技術面皆無明顯起漲訊號，建議先觀望。"
+
+    elif user_status == "📈 已持股 (帳面獲利中)":
+        if signal in ["🚀 土洋雙加碼", "🔥 投信鎖碼", "💰 外資大掃貨", "🔥 買盤進駐"]:
+            if price >= s_ma_val:
+                action_tip, desc = "🔥 順勢加碼 / 續抱", f"主力持續偏多，股價在短均線 ({short_ma}日) 之上，可讓獲利奔跑或逢回支撐加碼。"
+            else:
+                action_tip, desc = "⚠️ 跌破短均", f"籌碼雖佳但跌破短均線 ({short_ma}日)，建議部分獲利了結。"
+        elif "接刀" in signal or "賣壓" in signal:
+            action_tip, desc = "⚠️ 逢高減碼", "主力有逢高出貨跡象，建議分批落袋為安。"
+        else:
+            action_tip, desc = "🚀 獲利續抱", "趨勢未變，沿短均線持股，不預設高點。"
+
+    else: # 📉 已持股 (帳面套牢中)
+        if signal in ["🚀 土洋雙加碼", "🔥 投信鎖碼", "💰 外資大掃貨"]:
+            action_tip, desc = "🌱 試探性攤平", "法人有逆勢護盤跡象，可考慮小額攤平一次，嚴守前低停損。"
+        elif "接刀" in signal or "賣壓" in signal:
+            action_tip, desc = "🚨 嚴禁攤平 / 停損減碼", "主力全面倒貨且趨勢破位，絕不能攤平，建議果斷停損。"
+        else:
+            action_tip, desc = "⏳ 觀望勿攤平", "未見止跌訊號，越攤平只會套越深，靜待轉折。"
+
+    # 6. 顯示最終結論
+    st.info(f"### {action_tip}\n{desc}")
+
 # ==========================================
 # Streamlit 主介面
 # ==========================================
