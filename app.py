@@ -204,6 +204,90 @@ class ChipCrawlerV160:
 # ==========================================
 # 個股詳細圖表顯示函式 (強效修正 DataFrame 結構)
 # ==========================================
+@st.fragment
+def render_tactical_guide(stock_id, stock_name, price, s_ma_val, l_ma_val, t_sum5, f_sum5, m_sum5, pct_change, short_ma):
+    st.divider()
+    st.subheader(f"💡 {stock_name} 專屬持股戰術指南")
+    
+    # 1. 計算這檔股票最新的均線狀態
+    ma_diff = abs(s_ma_val - l_ma_val) / l_ma_val
+    if ma_diff < 0.025: # 短長均線差距 2.5% 以內視為糾結
+        ma_state = "糾結"
+    elif (price > s_ma_val) and (s_ma_val > l_ma_val):
+        ma_state = "多頭"
+    else:
+        ma_state = "空頭"
+        
+    # 2. 依據真實籌碼數據判定訊號
+    if t_sum5 > 0 and f_sum5 > 0:
+        signal = "🚀 土洋雙加碼"
+    elif t_sum5 > 0:
+        signal = "🔥 投信鎖碼"
+    elif f_sum5 > 500:
+        signal = "💰 外資大掃貨"
+    elif m_sum5 > 0 and (f_sum5 < 0 or t_sum5 < 0):
+        signal = "💀 散戶接刀"
+    else:
+        if pct_change >= 2:
+            signal = "🔥 買盤進駐"
+        elif pct_change <= -2:
+            signal = "💀 賣壓沉重"
+        else:
+            signal = "🟢 籌碼整理"
+
+    # 3. 顯示目前偵測到的狀態
+    st.markdown(f"**目前偵測型態：** 均線 `{ma_state}` ｜ 籌碼 `{signal}`")
+    
+    # 4. 讓使用者點選持股情境
+    user_status = st.radio(
+        "請選擇您目前對本檔股票的狀態：",
+        ["🛒 未購入 (評估進場)", "📈 已持股 (帳面獲利中)", "📉 已持股 (帳面套牢中)"],
+        horizontal=True,
+        key=f"status_{stock_id}"
+    )
+    
+    # 5. 依據選擇與股票狀態給予專屬提示
+    action_tip, desc = "", ""
+    if user_status == "🛒 未購入 (評估進場)":
+        if signal in ["🚀 土洋雙加碼", "🔥 投信鎖碼", "💰 外資大掃貨", "🔥 買盤進駐"]:
+            if ma_state == "多頭":
+                action_tip, desc = "🔥 突破追漲", "極強順勢型態，適合分批追價，沿短均線持有。"
+            elif ma_state == "糾結":
+                action_tip, desc = "👀 潛伏卡位", "爆發前夕卡位點，盈虧比極佳，帶量突破可加碼。"
+            else:
+                action_tip, desc = "🌱 低檔試探", "左側交易抄底，建議小資金試水溫，嚴守前低停損。"
+        elif "接刀" in signal or "賣壓" in signal:
+            action_tip, desc = "🚨 觀望避開", "籌碼極差，縱使下跌也不可入場接刀。"
+        else:
+            if ma_state == "多頭":
+                action_tip, desc = "📈 技術偏多", "籌碼雖不明顯，但技術面強勢，可拉回短均買進。"
+            else:
+                action_tip, desc = "⏳ 觀望待變", "籌碼與技術面皆無明顯起漲訊號，建議先觀望。"
+
+    elif user_status == "📈 已持股 (帳面獲利中)":
+        if signal in ["🚀 土洋雙加碼", "🔥 投信鎖碼", "💰 外資大掃貨", "🔥 買盤進駐"]:
+            if price >= s_ma_val:
+                action_tip, desc = "🔥 順勢加碼 / 續抱", f"主力持續偏多，股價在短均線 ({short_ma}日) 之上，可讓獲利奔跑或逢回支撐加碼。"
+            else:
+                action_tip, desc = "⚠️ 跌破短均", f"籌碼雖佳但跌破短均線 ({short_ma}日)，建議部分獲利了結。"
+        elif "接刀" in signal or "賣壓" in signal:
+            action_tip, desc = "⚠️ 逢高減碼", "主力有逢高出貨跡象，建議分批落袋為安。"
+        else:
+            action_tip, desc = "🚀 獲利續抱", "趨勢未變，沿短均線持股，不預設高點。"
+
+    else: # 📉 已持股 (帳面套牢中)
+        if signal in ["🚀 土洋雙加碼", "🔥 投信鎖碼", "💰 外資大掃貨"]:
+            action_tip, desc = "🌱 試探性攤平", "法人有逆勢護盤跡象，可考慮小額攤平一次，嚴守前低停損。"
+        elif "接刀" in signal or "賣壓" in signal:
+            action_tip, desc = "🚨 嚴禁攤平 / 停損減碼", "主力全面倒貨且趨勢破位，絕不能攤平，建議果斷停損。"
+        else:
+            action_tip, desc = "⏳ 觀望勿攤平", "未見止跌訊號，越攤平只會套越深，靜待轉折。"
+
+    # 6. 顯示最終結論
+    st.info(f"### {action_tip}\n{desc}")
+
+
+
 def show_single_stock_detail(stock_id):
     custom_name = st.query_params.get("name")
     if custom_name:
@@ -526,29 +610,16 @@ with tab_guide:
         horizontal=True
     )
     
-    st.divider()
-    
-    if user_status == "🛒 未購入 (找進場點)":
-        st.subheader("🛒 未購入策略：追求最佳盈虧比買點")
-        st.table([
-            {"籌碼與型態": "投信鎖碼/土洋加碼 × 均線多頭", "提示訊號": "🔥 突破追漲", "戰術說明": "極強順勢型態，適合分批追價，沿短均線持有。"},
-            {"籌碼與型態": "主力建倉/外資大掃貨 × 均線糾結", "提示訊號": "👀 潛伏卡位", "戰術說明": "爆發前夕卡位點，盈虧比極佳，帶量突破加碼。"},
-            {"籌碼與型態": "法人逆勢急買 × 均線空頭", "提示訊號": "🌱 低檔試探", "戰術說明": "左側交易抄底，建議小資金試水溫，嚴守前低停損。"},
-            {"籌碼與型態": "散戶接刀 (法人大賣)", "提示訊號": "🚨 觀望避開", "戰術說明": "籌碼極差，縱使下跌也不可入場接刀。"}
-        ])
-
-    elif user_status == "📈 獲利持股中 (找加碼/停利點)":
-        st.subheader("📈 獲利持股策略：讓獲利奔跑與順勢加碼")
-        st.table([
-            {"籌碼與型態": "主力持續加碼 × 回檔短均線", "提示訊號": "🔥 順勢加碼", "戰術說明": "股價拉回支撐點且籌碼未散，為加碼絕佳時機。"},
-            {"籌碼與型態": "籌碼極佳 × 股價持續創新高", "提示訊號": "🚀 獲利續抱", "戰術說明": "趨勢未變，沿 20MA 持股，不必過早預設高點。"},
-            {"籌碼與型態": "高檔爆量 + 散戶接刀/法人倒貨", "提示訊號": "⚠️ 逢高減碼", "戰術說明": "主力有高檔逢高出貨跡象，建議分批落袋為安。"}
-        ])
-
-    else:
-        st.subheader("📉 虧損套牢策略：嚴禁盲目攤平與風險控管")
-        st.table([
-            {"籌碼與型態": "法人逆勢抄底/護盤", "提示訊號": "🌱 試探性小額攤平", "戰術說明": "僅限法人明確護盤時小攤一次，並以近期低點為絕對停損點。"},
-            {"籌碼與型態": "籌碼整理中 / 趨勢向下", "提示訊號": "⏳ 觀望勿攤平", "戰術說明": "未見止跌訊號，越攤平只會套越深，靜待轉折。"},
-            {"籌碼與型態": "散戶接刀 + 跌破均線破位", "提示訊號": "🚨 嚴禁攤平 / 停損減碼", "戰術說明": "主力已全面倒貨，絕不能攤平，建議果斷減碼停損。"}
-        ])
+# 呼叫局部更新戰術指南區塊
+    render_tactical_guide(
+        stock_id=stock_id,
+        stock_name=stock_name,
+        price=price,
+        s_ma_val=p_df['MS'].iloc[-1],
+        l_ma_val=p_df['ML'].iloc[-1],
+        t_sum5=t_sum5,
+        f_sum5=f_sum5,
+        m_sum5=m_sum5,
+        pct_change=pct_change,
+        short_ma=short_ma
+    )
