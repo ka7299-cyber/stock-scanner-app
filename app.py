@@ -175,6 +175,49 @@ class ChipCrawlerV160:
 # ==========================================
 # 個股詳細圖表顯示函式
 # ==========================================
+def find_best_ma_golden_bluff_v2(df, start_day, end_day):
+    closes = df['Close'].values; lows = df['Low'].values; highs = df['High'].values
+    n = len(df)
+    best_ma = start_day; best_score = -np.inf
+    fib_nums = {21, 34, 55, 89}
+    for ma_len in range(start_day, end_day + 1):
+        ma_series = df['Close'].rolling(window=ma_len).mean()
+        ma_values = ma_series.values
+        if n < ma_len + 10: continue
+        valid_idx = slice(ma_len, n)
+        l_slice = lows[valid_idx]; h_slice = highs[valid_idx]; ma_slice = ma_values[valid_idx]
+        min_idxs = argrelextrema(l_slice, np.less, order=3)[0]
+        max_idxs = argrelextrema(h_slice, np.greater, order=3)[0]
+        total_error = 0; point_count = 0
+        if len(min_idxs) > 0:
+            total_error += (np.abs(l_slice[min_idxs] - ma_slice[min_idxs]) / ma_slice[min_idxs]).sum()
+            point_count += len(min_idxs)
+        if len(max_idxs) > 0:
+            total_error += (np.abs(h_slice[max_idxs] - ma_slice[max_idxs]) / ma_slice[max_idxs]).sum()
+            point_count += len(max_idxs)
+        avg_error = (total_error / point_count) if point_count > 0 else 0.05
+        score = 100 - (avg_error * 3000) + (ma_len - start_day) * 0.8
+        cross_mask = (closes[valid_idx] > ma_slice) ^ (np.roll(closes[valid_idx], 1) > np.roll(ma_slice, 1))
+        if np.sum(cross_mask[1:]) / (len(ma_slice) / 20.0) > 3.0: score -= 100
+        if ma_len in fib_nums: score += 10
+        if score > best_score:
+            best_score = score; best_ma = ma_len
+    return best_ma
+
+def backtest_stats(df, ma_days):
+    ma = df['Close'].rolling(window=ma_days).mean()
+    signals = (df['Close'] > ma).astype(int)
+    actions = signals.diff()
+    wins = 0; total = 0; holding = False; entry = 0
+    for i in range(1, len(df)):
+        p = df['Close'].iloc[i]
+        if actions.iloc[i] == 1 and not holding:
+            entry = p; holding = True
+        elif actions.iloc[i] == -1 and holding:
+            if p > entry: wins += 1
+            total += 1; holding = False
+    return (wins / total * 100) if total > 0 else 0, total
+
 def show_single_stock_detail(stock_id):
     # 優先讀取網址傳遞過來的名稱，若無則對照全域 CN_NAME_MAP
     custom_name = st.query_params.get("name")
@@ -243,6 +286,18 @@ def show_single_stock_detail(stock_id):
     with cols[2]:
         st.metric("近 5 日融資累計", f"{m_sum5:+d} 張", delta=f"當日: {m[1]:+d} 張" if m else None)
 
+try:
+        p_short, p_long = TW_STRATEGIES.get(stock_id, (None, None))
+    except NameError:
+        p_short, p_long = None, None  # 防止您的檔案沒設定 TW_STRATEGIES 字典報錯
+
+    with st.spinner('🎯 演算最佳均線中...'):
+        final_s = p_short if p_short else find_best_ma_golden_bluff_v2(df, 16, 25)
+        final_l = p_long if p_long else find_best_ma_golden_bluff_v2(df, 45, 70)
+        
+    df['MS'] = df['Close'].rolling(window=final_s).mean()
+    df['ML'] = df['Close'].rolling(window=final_l).mean()
+    
     # 3. K 線與量能圖表
     p_df = df.tail(120).copy()
     p_df['Date_Str'] = pd.to_datetime(p_df.index).strftime('%Y-%m-%d')
