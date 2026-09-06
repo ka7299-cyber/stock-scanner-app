@@ -102,6 +102,7 @@ def find_best_ma_v2(df, start_day, end_day):
             best_score = score
             best_ma = ma_len
     return best_ma
+
 # ==========================================
 # 籌碼模組 (支援近 5 日累積)
 # ==========================================
@@ -203,53 +204,6 @@ def find_best_ma_golden_bluff_v2(df, start_day, end_day):
         if score > best_score:
             best_score = score; best_ma = ma_len
     return best_ma
-        
-# 準備近期的資料來畫圖 (例如取近 120 天，若您原本有 k_days 變數可直接替換)
-    p_df = df.tail(120).copy()
-        
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.02, row_heights=[0.7, 0.3])
-    fig.add_trace(go.Candlestick(x=p_df.index, open=p_df['Open'], high=p_df['High'], low=p_df['Low'], close=p_df['Close'], name='K棒', increasing_line_color='#ef5350', decreasing_line_color='#26a69a'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=p_df.index, y=p_df['MS'], name='短', line=dict(color='#ff9800', width=2)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=p_df.index, y=p_df['ML'], name='長', line=dict(color='#9c27b0', width=2)), row=1, col=1)
-
-    v_cols = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
-    fig.add_trace(go.Bar(x=p_df.index, y=p_df['Volume'], marker_color=v_cols, name='量'), row=2, col=1)
-
-    fig.update_xaxes(
-        spikecolor="gray",
-        spikethickness=1,
-        spikemode="across",
-        spikesnap="cursor",
-        showspikes=True
-     )
-
-    fig.update_layout(
-        height=550,
-        template="plotly_white",
-        xaxis_rangeslider_visible=False,
-        showlegend=False,
-        margin=dict(l=10, r=10, t=30, b=10),
-        hovermode="x unified",
-        hoverlabel=dict(bgcolor="rgba(255, 255, 255, 0.9)", font_size=12, font_color="#000000", namelength=0),
-        dragmode=False
-     )
-    fig.update_yaxes(side="right")
-
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-    
-def backtest_stats(df, ma_days):
-    ma = df['Close'].rolling(window=ma_days).mean()
-    signals = (df['Close'] > ma).astype(int)
-    actions = signals.diff()
-    wins = 0; total = 0; holding = False; entry = 0
-    for i in range(1, len(df)):
-        p = df['Close'].iloc[i]
-        if actions.iloc[i] == 1 and not holding:
-            entry = p; holding = True
-        elif actions.iloc[i] == -1 and holding:
-            if p > entry: wins += 1
-            total += 1; holding = False
-    return (wins / total * 100) if total > 0 else 0, total
 
 def show_single_stock_detail(stock_id):
     # 優先讀取網址傳遞過來的名稱，若無則對照全域 CN_NAME_MAP
@@ -289,9 +243,6 @@ def show_single_stock_detail(stock_id):
     m, i, s = crawler.get_latest_chip_summary(target_date)
     f_sum5, t_sum5, m_sum5 = crawler.get_multi_day_summary(recent_dates, lookback_days=5)
 
-    last = df.iloc[-1]
-    
-# 強制擷取純數值，防範 MultiIndex 與轉型失敗
     try:
         close_series = df['Close']
         if isinstance(close_series, pd.DataFrame):
@@ -309,7 +260,7 @@ def show_single_stock_detail(stock_id):
     c2.metric("漲跌", f"{change:+.2f}")
     c3.metric("漲跌幅", f"{pct_change:+.2f}%")
 
-    # 2. 近 5 日籌碼累積卡片
+    # 近 5 日籌碼累積卡片
     st.markdown("### 🔍 近 5 日籌碼累積詳情")
     cols = st.columns(3)
     with cols[0]:
@@ -319,56 +270,53 @@ def show_single_stock_detail(stock_id):
     with cols[2]:
         st.metric("近 5 日融資累計", f"{m_sum5:+d} 張", delta=f"當日: {m[1]:+d} 張" if m else None)
 
-    try:
-        p_short, p_long = TW_STRATEGIES.get(stock_id, (None, None))
-    except NameError:
-        p_short, p_long = None, None  # 防止您的檔案沒設定 TW_STRATEGIES 字典報錯
-
-    with st.spinner('🎯 演算最佳均線中...'):
-        final_s = p_short if p_short else find_best_ma_golden_bluff_v2(df, 16, 25)
-        final_l = p_long if p_long else find_best_ma_golden_bluff_v2(df, 45, 70)
-        
-    df['MS'] = df['Close'].rolling(window=final_s).mean()
-    df['ML'] = df['Close'].rolling(window=final_l).mean()
-    
-    # 3. K 線與量能圖表
+    # K 線與量能圖表（以解開繪圖衝突）
     p_df = df.tail(120).copy()
-    p_df['Date_Str'] = pd.to_datetime(p_df.index).strftime('%Y-%m-%d')
     
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.02, row_heights=[0.7, 0.3])
 
     fig.add_trace(go.Candlestick(
-        x=p_df['Date_Str'], open=p_df['Open'], high=p_df['High'], low=p_df['Low'], close=p_df['Close'],
-        name='', increasing_line_color='#ef5350', decreasing_line_color='#26a69a',
-        hovertemplate="%{x} 開:%{open:.1f} 高:%{high:.1f} 低:%{low:.1f} 收:%{close:.1f}<extra></extra>"
+        x=p_df.index, open=p_df['Open'], high=p_df['High'], low=p_df['Low'], close=p_df['Close'],
+        name='K棒', increasing_line_color='#ef5350', decreasing_line_color='#26a69a'
     ), row=1, col=1)
     
     fig.add_trace(go.Scatter(
-        x=p_df['Date_Str'], y=p_df['MS'], mode='lines', 
-        name=f'短均({short_ma}日)', line=dict(color='orange', width=1.5), hoverinfo='none'
+        x=p_df.index, y=p_df['MS'], mode='lines', 
+        name=f'短均({short_ma}日)', line=dict(color='#ff9800', width=1.5)
     ), row=1, col=1)
     
     fig.add_trace(go.Scatter(
-        x=p_df['Date_Str'], y=p_df['ML'], mode='lines', 
-        name=f'長均({long_ma}日)', line=dict(color='blue', width=1.5), hoverinfo='none'
+        x=p_df.index, y=p_df['ML'], mode='lines', 
+        name=f'長均({long_ma}日)', line=dict(color='#9c27b0', width=1.5)
     ), row=1, col=1)
     
-    colors = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
+    v_cols = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
     fig.add_trace(go.Bar(
-        x=p_df['Date_Str'], y=(p_df['Volume'] / 1000).astype(int), 
-        name='', marker_color=colors, hovertemplate="成交量: %{y:,} 張<extra></extra>"
+        x=p_df.index, y=p_df['Volume'], 
+        name='量', marker_color=v_cols
     ), row=2, col=1)
     
-    fig.update_xaxes(type='category', spikecolor="gray", spikethickness=1, spikemode="across", spikesnap="cursor", showspikes=True)
-    
-    fig.update_layout(
-        xaxis_rangeslider_visible=False, height=550, margin=dict(l=10, r=10, t=30, b=10),
-        hovermode="x unified",
-        hoverlabel=dict(bgcolor="rgba(255, 255, 255, 0.9)", font_size=12, font_color="#000000", namelength=0),
-        showlegend=False
+    fig.update_xaxes(
+        spikecolor="gray",
+        spikethickness=1,
+        spikemode="across",
+        spikesnap="cursor",
+        showspikes=True
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_layout(
+        height=550,
+        template="plotly_white",
+        xaxis_rangeslider_visible=False,
+        showlegend=False,
+        margin=dict(l=10, r=10, t=30, b=10),
+        hovermode="x unified",
+        hoverlabel=dict(bgcolor="rgba(255, 255, 255, 0.9)", font_size=12, font_color="#000000", namelength=0),
+        dragmode=False
+    )
+    fig.update_yaxes(side="right")
+    
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 # ==========================================
 # Streamlit 主介面 (雙模式 + 智能解讀)
@@ -380,14 +328,12 @@ if show_stock_id:
 
 st.title("📡 台股強勢股快篩 (V170 戰略解讀版)")
 
-# 三大選股模式
 option = st.radio(
     "選擇掃描模式", 
     ["自選股票", "熱門板塊指標股 (50檔龍頭)", "熱門飆股動態快篩 (當日成交量Top50)"],
     index=0
 )
 
-# 判斷股票池來源
 stock_list = []
 if option == "自選股票":
     stock_input = st.text_input("輸入股票代號 (空白隔開)", "2330 2454 2603")
@@ -398,7 +344,6 @@ elif option == "熱門板塊指標股 (50檔龍頭)":
         all_codes += sector
     stock_list = list(set(all_codes))
 else:
-    # ⚡ 熱門飆股動態快篩焦點股
     top_tickers = [
         "2330", "2317", "2454", "2382", "3231", 
         "2603", "2609", "2615", "1519", "1504",
@@ -427,29 +372,6 @@ if st.button("開始掃描"):
             prev_p = df_s['Close'].iloc[-2]
             pct_chg = ((last_p - prev_p) / prev_p) * 100
 
-            # 💡 繁體中文名稱對照表 (常見熱門股 + 電子半導體50強)
-            CN_NAME_MAP = {
-                # 原有熱門指標股
-                "2330": "台積電", "2317": "鴻海", "2454": "聯發科", "2382": "廣達", "3231": "緯創",
-                "2603": "長榮", "2609": "陽明", "2615": "萬海", "1519": "華城", "1504": "東元",
-                "2356": "英業達", "2376": "技嘉", "3037": "欣興", "2303": "聯電", "3711": "日月光投控",
-                "6669": "緯穎", "3661": "世芯-KY", "3443": "創意", "8046": "南電", "3035": "智原",
-                "2881": "富邦金", "2882": "國泰金", "2891": "中信金", "2886": "兆豐金", "2884": "玉山金",
-                "1795": "美時", "6472": "保瑞", "6446": "藥華藥", "2002": "中鋼", "2412": "中華電",
-                # 電子與半導體熱門50強
-                "2344": "華邦電", "2408": "南亞科", "2337": "旺宏", "2308": "台達電", "2324": "仁寶",
-                "2357": "華碩", "2301": "光寶科", "2377": "微星", "2353": "宏碁", "3008": "大立光",
-                "2327": "國巨", "2492": "華新科", "3034": "聯詠", "2379": "瑞昱", "6531": "愛普*",
-                "3529": "力旺", "6415": "矽力*-KY", "3017": "奇鋐", "3324": "雙鴻", "6230": "超眾",
-                "6274": "台燿", "2383": "台光電", "6213": "聯茂", "3189": "景碩", "2368": "金像電",
-                "2360": "致茂", "6409": "旭隼", "5269": "祥碩", "6643": "M31", "3680": "家登",
-                "3131": "弘塑", "3583": "辛耘", "6187": "萬潤", "2409": "友達", "3481": "群創",
-                "6116": "彩晶", "2340": "台亞", "2374": "佳能", "2354": "鴻準", "2352": "佳世達",
-                "2312": "金寶", "2323": "中洋光", "3702": "大聯大", "3036": "文曄", "2347": "聯強",
-                "2345": "智邦", "5388": "中磊", "6285": "啟碁", "2314": "揚智", "6202": "盛群"
-            }
-
-            # 優先採用中文表，不在表內才向 Yahoo 抓取
             if stock_id in CN_NAME_MAP:
                 s_name = CN_NAME_MAP[stock_id]
             else:
@@ -462,12 +384,10 @@ if st.button("開始掃描"):
 
             display_name = f"{stock_id} {s_name}".strip()
 
-            # 抓取 5 日籌碼
             crawler = ChipCrawlerV160(stock_id)
             recent_dates = [d.to_pydatetime().date() for d in df_s.index[-10:]]
             f_sum5, t_sum5, m_sum5 = crawler.get_multi_day_summary(recent_dates, lookback_days=5)
 
-            # 💡 籌碼智能解讀邏輯
             if t_sum5 >= 300 and m_sum5 <= 0:
                 signal = "🔥 投信鎖碼 (法人吃貨/散戶退場)"
             elif f_sum5 >= 1000 and t_sum5 >= 300:
@@ -482,7 +402,7 @@ if st.button("開始掃描"):
                 signal = "🟢 籌碼整理中"
 
             results.append({
-                "標的": display_name,                 # 呈現：2330 台積電
+                "標的": display_name,
                 "收盤價": f"{last_p:.2f}",
                 "漲跌幅": f"{pct_chg:+.2f}%",
                 "籌碼戰略解讀": signal,
@@ -496,7 +416,6 @@ if st.button("開始掃描"):
 
     if results:
         res_df = pd.DataFrame(results)
-        # 💡 將 raw_id 與 標的 名稱順便帶入網址網址 (?stock=2330&name=2330 台積電)
         res_df["查看分頁"] = res_df.apply(lambda row: f"?stock={row['raw_id']}&name={row['標的']}", axis=1)
         res_df = res_df.drop(columns=["raw_id"])
         
