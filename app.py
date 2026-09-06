@@ -327,7 +327,7 @@ def show_single_stock_detail(stock_id):
     p_df = df.tail(120).copy()
     p_df['Date_Str'] = pd.to_datetime(p_df.index).strftime('%Y-%m-%d')
     
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.3, 0.7])
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.02, row_heights=[0.7, 0.3])=[0.3, 0.7])
     
     fig.add_trace(go.Candlestick(
         x=p_df['Date_Str'], open=p_df['Open'], high=p_df['High'], low=p_df['Low'], close=p_df['Close'],
