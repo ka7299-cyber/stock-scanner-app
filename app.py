@@ -207,35 +207,36 @@ def find_best_ma_golden_bluff_v2(df, start_day, end_day):
 # 準備近期的資料來畫圖 (例如取近 120 天，若您原本有 k_days 變數可直接替換)
     p_df = df.tail(120).copy()
         
-        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.02, row_heights=[0.7, 0.3])
-        fig.add_trace(go.Candlestick(x=p_df.index, open=p_df['Open'], high=p_df['High'], low=p_df['Low'], close=p_df['Close'], name='K棒', increasing_line_color='#ef5350', decreasing_line_color='#26a69a'), row=1, col=1)
-        fig.add_trace(go.Scatter(x=p_df.index, y=p_df['MS'], name='短', line=dict(color='#ff9800', width=2)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=p_df.index, y=p_df['ML'], name='長', line=dict(color='#9c27b0', width=2)), row=1, col=1)
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.02, row_heights=[0.7, 0.3])
+    fig.add_trace(go.Candlestick(x=p_df.index, open=p_df['Open'], high=p_df['High'], low=p_df['Low'], close=p_df['Close'], name='K棒', increasing_line_color='#ef5350', decreasing_line_color='#26a69a'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=p_df.index, y=p_df['MS'], name='短', line=dict(color='#ff9800', width=2)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=p_df.index, y=p_df['ML'], name='長', line=dict(color='#9c27b0', width=2)), row=1, col=1)
 
-        v_cols = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
-        fig.add_trace(go.Bar(x=p_df.index, y=p_df['Volume'], marker_color=v_cols, name='量'), row=2, col=1)
+    v_cols = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
+    fig.add_trace(go.Bar(x=p_df.index, y=p_df['Volume'], marker_color=v_cols, name='量'), row=2, col=1)
 
-        fig.update_xaxes(
-            spikecolor="gray",
-            spikethickness=1,
-            spikemode="across",
-            spikesnap="cursor",
-            showspikes=True
-        )
+    fig.update_xaxes(
+        spikecolor="gray",
+        spikethickness=1,
+        spikemode="across",
+        spikesnap="cursor",
+        showspikes=True
+     )
 
-        fig.update_layout(
-            height=550,
-            template="plotly_white",
-            xaxis_rangeslider_visible=False,
-            showlegend=False,
-            margin=dict(l=10, r=10, t=30, b=10),
-            hovermode="x unified",
-            hoverlabel=dict(bgcolor="rgba(255, 255, 255, 0.9)", font_size=12, font_color="#000000", namelength=0),
-            dragmode=False
-        )
-        fig.update_yaxes(side="right")
+    fig.update_layout(
+        height=550,
+        template="plotly_white",
+        xaxis_rangeslider_visible=False,
+        showlegend=False,
+        margin=dict(l=10, r=10, t=30, b=10),
+        hovermode="x unified",
+        hoverlabel=dict(bgcolor="rgba(255, 255, 255, 0.9)", font_size=12, font_color="#000000", namelength=0),
+        dragmode=False
+     )
+    fig.update_yaxes(side="right")
 
-        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    
 def backtest_stats(df, ma_days):
     ma = df['Close'].rolling(window=ma_days).mean()
     signals = (df['Close'] > ma).astype(int)
