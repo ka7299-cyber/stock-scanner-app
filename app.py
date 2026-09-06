@@ -320,106 +320,147 @@ if show_stock_id:
     st.stop()
 
 st.title("📡 台股強勢股快篩 (V170 戰略解讀版)")
-
-option = st.radio(
-    "選擇掃描模式", 
-    ["自選股票", "熱門板塊指標股 (50檔龍頭)", "熱門飆股動態快篩 (當日成交量Top50)"],
-    index=0
-)
-
-stock_list = []
-if option == "自選股票":
-    stock_input = st.text_input("輸入股票代號 (空白隔開)", "2330 2454 2603 2313")
-    stock_list = stock_input.split()
-elif option == "熱門板塊指標股 (50檔龍頭)":
-    all_codes = []
-    for sector in SECTOR_DB.values():
-        all_codes += sector
-    stock_list = list(set(all_codes))
-else:
-    top_tickers = [
-        "2330", "2317", "2454", "2382", "3231", 
-        "2603", "2609", "2615", "1519", "1504",
-        "2356", "2376", "3037", "2303", "3711",
-        "6669", "3661", "3443", "8046", "3035"
-    ]
-    stock_list = top_tickers
-
-results = []
-if st.button("開始掃描"):
-    tickers = [f"{c}.TW" for c in stock_list]
-    try:
-        data = yf.download(" ".join(tickers), period="3mo", group_by='ticker', auto_adjust=True)
-    except Exception as e:
-        st.error("❌ 無法下載行情資料，請檢查網路。")
-        st.stop()
-
-    for stock_id in stock_list:
-        try:
-            df_s = data[f"{stock_id}.TW"].copy() if f"{stock_id}.TW" in data else pd.DataFrame()
-            if isinstance(df_s.columns, pd.MultiIndex):
-                df_s.columns = df_s.columns.get_level_values(0)
-                
-            if df_s.empty or df_s['Close'].dropna().empty:
-                continue
-            df_s = df_s.dropna(subset=['Close'])
-            
-            last_p = float(df_s['Close'].iloc[-1])
-            prev_p = float(df_s['Close'].iloc[-2])
-            pct_chg = ((last_p - prev_p) / prev_p) * 100
-
-            if stock_id in CN_NAME_MAP:
-                s_name = CN_NAME_MAP[stock_id]
-            else:
-                s_name = ""
-
-            display_name = f"{stock_id} {s_name}".strip()
-
-            crawler = ChipCrawlerV160(stock_id)
-            recent_dates = [d.to_pydatetime().date() for d in df_s.index[-10:]]
-            f_sum5, t_sum5, m_sum5 = crawler.get_multi_day_summary(recent_dates, lookback_days=5)
-
-            if t_sum5 >= 300 and m_sum5 <= 0:
-                signal = "🔥 投信鎖碼 (法人吃貨/散戶退場)"
-            elif f_sum5 >= 1000 and t_sum5 >= 300:
-                signal = "🚀 土洋雙加碼 (主力強勢作多)"
-            elif f_sum5 >= 1500:
-                signal = "💰 外資大掃貨 (外資波段佈局)"
-            elif t_sum5 >= 500:
-                signal = "🎯 投信急買 (波段作多訊號)"
-            elif f_sum5 < -1000 and m_sum5 > 500:
-                signal = "💀 散戶接刀 (法人倒貨/融資暴增)"
-            else:
-                signal = "🟢 籌碼整理中"
-
-            results.append({
-                "標的": display_name,
-                "收盤價": f"{last_p:.2f}",
-                "漲跌幅": f"{pct_chg:+.2f}%",
-                "籌碼戰略解讀": signal,
-                "5日外資": f"{f_sum5:+d} 張",
-                "5日投信": f"{t_sum5:+d} 張",
-                "5日融資": f"{m_sum5:+d} 張",
-                "raw_id": stock_id
-            })
-        except Exception as e:
-            continue
-
-    if results:
-        res_df = pd.DataFrame(results)
-        res_df["查看分頁"] = res_df.apply(lambda row: f"?stock={row['raw_id']}&name={row['標的']}", axis=1)
-        res_df = res_df.drop(columns=["raw_id"])
-        
-        st.dataframe(
-            res_df,
-            column_config={
-                "查看分頁": st.column_config.LinkColumn(
-                    "詳細圖表",
-                    display_text="📊 開啟 K 線圖"
-                )
-            },
-            use_container_width=True,
-            hide_index=True
-        )
+tab_main, tab_guide = st.tabs(["🎯 籌碼掃描主頁", "💡 持股戰術指南"])
+    
+    with tab_main:
+    
+    
+    option = st.radio(
+        "選擇掃描模式", 
+        ["自選股票", "熱門板塊指標股 (50檔龍頭)", "熱門飆股動態快篩 (當日成交量Top50)"],
+        index=0
+    )
+    
+    stock_list = []
+    if option == "自選股票":
+        stock_input = st.text_input("輸入股票代號 (空白隔開)", "2330 2454 2603 2313")
+        stock_list = stock_input.split()
+    elif option == "熱門板塊指標股 (50檔龍頭)":
+        all_codes = []
+        for sector in SECTOR_DB.values():
+            all_codes += sector
+        stock_list = list(set(all_codes))
     else:
-        st.warning("⚠️ 查無符合條件的股票")
+        top_tickers = [
+            "2330", "2317", "2454", "2382", "3231", 
+            "2603", "2609", "2615", "1519", "1504",
+            "2356", "2376", "3037", "2303", "3711",
+            "6669", "3661", "3443", "8046", "3035"
+        ]
+        stock_list = top_tickers
+    
+    results = []
+    if st.button("開始掃描"):
+        tickers = [f"{c}.TW" for c in stock_list]
+        try:
+            data = yf.download(" ".join(tickers), period="3mo", group_by='ticker', auto_adjust=True)
+        except Exception as e:
+            st.error("❌ 無法下載行情資料，請檢查網路。")
+            st.stop()
+    
+        for stock_id in stock_list:
+            try:
+                df_s = data[f"{stock_id}.TW"].copy() if f"{stock_id}.TW" in data else pd.DataFrame()
+                if isinstance(df_s.columns, pd.MultiIndex):
+                    df_s.columns = df_s.columns.get_level_values(0)
+                    
+                if df_s.empty or df_s['Close'].dropna().empty:
+                    continue
+                df_s = df_s.dropna(subset=['Close'])
+                
+                last_p = float(df_s['Close'].iloc[-1])
+                prev_p = float(df_s['Close'].iloc[-2])
+                pct_chg = ((last_p - prev_p) / prev_p) * 100
+    
+                if stock_id in CN_NAME_MAP:
+                    s_name = CN_NAME_MAP[stock_id]
+                else:
+                    s_name = ""
+    
+                display_name = f"{stock_id} {s_name}".strip()
+    
+                crawler = ChipCrawlerV160(stock_id)
+                recent_dates = [d.to_pydatetime().date() for d in df_s.index[-10:]]
+                f_sum5, t_sum5, m_sum5 = crawler.get_multi_day_summary(recent_dates, lookback_days=5)
+    
+                if t_sum5 >= 300 and m_sum5 <= 0:
+                    signal = "🔥 投信鎖碼 (法人吃貨/散戶退場)"
+                elif f_sum5 >= 1000 and t_sum5 >= 300:
+                    signal = "🚀 土洋雙加碼 (主力強勢作多)"
+                elif f_sum5 >= 1500:
+                    signal = "💰 外資大掃貨 (外資波段佈局)"
+                elif t_sum5 >= 500:
+                    signal = "🎯 投信急買 (波段作多訊號)"
+                elif f_sum5 < -1000 and m_sum5 > 500:
+                    signal = "💀 散戶接刀 (法人倒貨/融資暴增)"
+                else:
+                    signal = "🟢 籌碼整理中"
+    
+                results.append({
+                    "標的": display_name,
+                    "收盤價": f"{last_p:.2f}",
+                    "漲跌幅": f"{pct_chg:+.2f}%",
+                    "籌碼戰略解讀": signal,
+                    "5日外資": f"{f_sum5:+d} 張",
+                    "5日投信": f"{t_sum5:+d} 張",
+                    "5日融資": f"{m_sum5:+d} 張",
+                    "raw_id": stock_id
+                })
+            except Exception as e:
+                continue
+    
+        if results:
+            res_df = pd.DataFrame(results)
+            res_df["查看分頁"] = res_df.apply(lambda row: f"?stock={row['raw_id']}&name={row['標的']}", axis=1)
+            res_df = res_df.drop(columns=["raw_id"])
+            
+            st.dataframe(
+                res_df,
+                column_config={
+                    "查看分頁": st.column_config.LinkColumn(
+                        "詳細圖表",
+                        display_text="📊 開啟 K 線圖"
+                    )
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.warning("⚠️ 查無符合條件的股票")
+
+with tab_guide:
+    st.header("💡 持股戰術提示與情境決策指南")
+    st.caption("請根據您目前的「持股狀態」切換檢視專屬戰術指南：")
+    
+    user_status = st.radio(
+        "選擇您的個人持股情境：",
+        ["🛒 未購入 (找進場點)", "📈 獲利持股中 (找加碼/停利點)", "📉 虧損套牢中 (評估攤平/停損)"],
+        horizontal=True
+    )
+    
+    st.divider()
+    
+    if user_status == "🛒 未購入 (找進場點)":
+        st.subheader("🛒 未購入策略：追求最佳盈虧比買點")
+        st.table([
+            {"籌碼與型態": "投信鎖碼/土洋加碼 × 均線多頭", "提示訊號": "🔥 突破追漲", "戰術說明": "極強順勢型態，適合分批追價，沿短均線持有。"},
+            {"籌碼與型態": "主力建倉/外資大掃貨 × 均線糾結", "提示訊號": "👀 潛伏卡位", "戰術說明": "爆發前夕卡位點，盈虧比極佳，帶量突破加碼。"},
+            {"籌碼與型態": "法人逆勢急買 × 均線空頭", "提示訊號": "🌱 低檔試探", "戰術說明": "左側交易抄底，建議小資金試水溫，嚴守前低停損。"},
+            {"籌碼與型態": "散戶接刀 (法人大賣)", "提示訊號": "🚨 觀望避開", "戰術說明": "籌碼極差，縱使下跌也不可入場接刀。"}
+        ])
+
+    elif user_status == "📈 獲利持股中 (找加碼/停利點)":
+        st.subheader("📈 獲利持股策略：讓獲利奔跑與順勢加碼")
+        st.table([
+            {"籌碼與型態": "主力持續加碼 × 回檔短均線", "提示訊號": "🔥 順勢加碼", "戰術說明": "股價拉回支撐點且籌碼未散，為加碼絕佳時機。"},
+            {"籌碼與型態": "籌碼極佳 × 股價持續創新高", "提示訊號": "🚀 獲利續抱", "戰術說明": "趨勢未變，沿 20MA 持股，不必過早預設高點。"},
+            {"籌碼與型態": "高檔爆量 + 散戶接刀/法人倒貨", "提示訊號": "⚠️ 逢高減碼", "戰術說明": "主力有高檔逢高出貨跡象，建議分批落袋為安。"}
+        ])
+
+    else:
+        st.subheader("📉 虧損套牢策略：嚴禁盲目攤平與風險控管")
+        st.table([
+            {"籌碼與型態": "法人逆勢抄底/護盤", "提示訊號": "🌱 試探性小額攤平", "戰術說明": "僅限法人明確護盤時小攤一次，並以近期低點為絕對停損點。"},
+            {"籌碼與型態": "籌碼整理中 / 趨勢向下", "提示訊號": "⏳ 觀望勿攤平", "戰術說明": "未見止跌訊號，越攤平只會套越深，靜待轉折。"},
+            {"籌碼與型態": "散戶接刀 + 跌破均線破位", "提示訊號": "🚨 嚴禁攤平 / 停損減碼", "戰術說明": "主力已全面倒貨，絕不能攤平，建議果斷減碼停損。"}
+        ])
