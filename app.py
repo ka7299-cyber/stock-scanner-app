@@ -214,15 +214,20 @@ def show_single_stock_detail(stock_id):
     f_sum5, t_sum5, m_sum5 = crawler.get_multi_day_summary(recent_dates, lookback_days=5)
 
     last = df.iloc[-1]
-    price = last['Close']
-    ms_v = last['MS']
-    ml_v = last['ML']
+# 強制轉成標準浮點數 (float)，避免拿到 Series 或 None 導致 TypeError
+    try:
+        price = float(df['Close'].iloc[-1].item()) if hasattr(df['Close'].iloc[-1], 'item') else float(df['Close'].iloc[-1])
+        prev_price = float(df['Close'].iloc[-2].item()) if len(df) > 1 and hasattr(df['Close'].iloc[-2], 'item') else float(df['Close'].iloc[-2]) if len(df) > 1 else price
+        change = price - prev_price
+        pct_change = (change / prev_price * 100) if prev_price != 0 else 0.0
+    except Exception as e:
+        st.error("❌ 個股行情數據解析失敗，請稍後重試。")
+        return
 
-    # 1. 頂部 KPI 卡片
     c1, c2, c3 = st.columns(3)
     c1.metric("現價", f"{price:.2f}")
-    c2.metric(f"短均線 ({short_ma}日)", f"{ms_v:.2f}")
-    c3.metric(f"長均線 ({long_ma}日)", f"{ml_v:.2f}")
+    c2.metric("漲跌", f"{change:+.2f}")
+    c3.metric("漲跌幅", f"{pct_change:+.2f}%")
 
     # 2. 近 5 日籌碼累積卡片
     st.markdown("### 🔍 近 5 日籌碼累積詳情")
