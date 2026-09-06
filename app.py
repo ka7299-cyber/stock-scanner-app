@@ -214,15 +214,19 @@ def show_single_stock_detail(stock_id):
     f_sum5, t_sum5, m_sum5 = crawler.get_multi_day_summary(recent_dates, lookback_days=5)
 
     last = df.iloc[-1]
-# 強制轉成標準浮點數 (float)，避免拿到 Series 或 None 導致 TypeError
+    
+# 強制擷取純數值，防範 MultiIndex 與轉型失敗
     try:
-        price = float(df['Close'].iloc[-1].item()) if hasattr(df['Close'].iloc[-1], 'item') else float(df['Close'].iloc[-1])
-        prev_price = float(df['Close'].iloc[-2].item()) if len(df) > 1 and hasattr(df['Close'].iloc[-2], 'item') else float(df['Close'].iloc[-2]) if len(df) > 1 else price
+        close_series = df['Close']
+        if isinstance(close_series, pd.DataFrame):
+            close_series = close_series.iloc[:, 0]
+            
+        price = float(close_series.iloc[-1])
+        prev_price = float(close_series.iloc[-2]) if len(close_series) > 1 else price
         change = price - prev_price
         pct_change = (change / prev_price * 100) if prev_price != 0 else 0.0
     except Exception as e:
-        st.error("❌ 個股行情數據解析失敗，請稍後重試。")
-        return
+        price = prev_price = change = pct_change = 0.0
 
     c1, c2, c3 = st.columns(3)
     c1.metric("現價", f"{price:.2f}")
