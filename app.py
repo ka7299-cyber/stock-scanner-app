@@ -322,7 +322,7 @@ if show_stock_id:
 st.title("📡 台股強勢股快篩 (V170 戰略解讀版)")
 tab_main, tab_guide = st.tabs(["🎯 籌碼掃描主頁", "💡 持股戰術指南"])
     
-    with tab_main:
+with tab_main:
     
     
     option = st.radio(
