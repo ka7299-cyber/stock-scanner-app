@@ -208,26 +208,38 @@ def find_best_ma_golden_bluff_v2(df, start_day, end_day):
     p_df = df.tail(120).copy()
         
         # 建立上下兩層的圖表 (上: K線與均線, 下: 成交量)
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.7, 0.3])
-        
-        # 1. 繪製 K 棒
-    fig.add_trace(go.Candlestick(
-            x=p_df.index, open=p_df['Open'], high=p_df['High'], low=p_df['Low'], close=p_df['Close'],
-            name='K棒', increasing_line_color='#ef5350', decreasing_line_color='#26a69a'
-        ), row=1, col=1)
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.02, row_heights=[0.7, 0.3])
+        fig.add_trace(go.Candlestick(x=p_df.index, open=p_df['Open'], high=p_df['High'], low=p_df['Low'], close=p_df['Close'], name='K棒', increasing_line_color='#ef5350', decreasing_line_color='#26a69a'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=p_df.index, y=p_df['MS'], name='短', line=dict(color='#ff9800', width=2)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=p_df.index, y=p_df['ML'], name='長', line=dict(color='#9c27b0', width=2)), row=1, col=1)
 
-        # 2. 繪製 AI 算出來的 短均線(MS) 與 長均線(ML)
-    fig.add_trace(go.Scatter(x=p_df.index, y=p_df['MS'], name='短均', line=dict(color='#ff9800', width=2)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=p_df.index, y=p_df['ML'], name='長均', line=dict(color='#9c27b0', width=2)), row=1, col=1)
+        v_cols = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
+        fig.add_trace(go.Bar(x=p_df.index, y=p_df['Volume'], marker_color=v_cols, name='量'), row=2, col=1)
 
-        # 3. 繪製成交量 (紅綠柱)
-    v_cols = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
-    fig.add_trace(go.Bar(x=p_df.index, y=p_df['Volume'], marker_color=v_cols, name='量'), row=2, col=1)
+        # 1. 移除 type='category' 以免圖表卡死變白
+        # 2. 保留您原本設定的十字游標線 (Spikes)
+        fig.update_xaxes(
+            spikecolor="gray",
+            spikethickness=1,
+            spikemode="across",
+            spikesnap="cursor",
+            showspikes=True
+        )
 
-        # 4. 版面設定與顯示
-    fig.update_layout(height=500, template="plotly_white", xaxis_rangeslider_visible=False, showlegend=True, margin=dict(l=0,r=10,t=10,b=0))
-    st.plotly_chart(fig, use_container_width=True)
-        # === 👆 繪圖區塊結束 👆 ===
+        # 3. 保留您原本美化的半透明提示框與高度設定
+        fig.update_layout(
+            height=550,
+            template="plotly_white",
+            xaxis_rangeslider_visible=False,
+            showlegend=False,
+            margin=dict(l=10, r=10, t=30, b=10),
+            hovermode="x unified",
+            hoverlabel=dict(bgcolor="rgba(255, 255, 255, 0.9)", font_size=12, font_color="#000000", namelength=0),
+            dragmode=False
+        )
+        fig.update_yaxes(side="right")
+
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 def backtest_stats(df, ma_days):
     ma = df['Close'].rolling(window=ma_days).mean()
