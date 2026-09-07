@@ -296,9 +296,8 @@ def render_tactical_guide(stock_id, stock_name, price, s_ma_val, l_ma_val,
     # 6. 顯示最終結論
     st.info(f"### {action_tip}\n{desc}")
 
-
 # ==========================================
-# 個股詳細圖表顯示函式
+# 個股詳細圖表顯示函式 (完整更新版)
 # ==========================================
 def show_single_stock_detail(stock_id):
     custom_name = st.query_params.get("name")
@@ -311,7 +310,7 @@ def show_single_stock_detail(stock_id):
 
     st.subheader(f"📊 股票代號：{stock_name} 詳細技術與籌碼分析")
     
-    # 下載歷史資料
+    # 下載歷史資料 (已改為近 1 年)
     df = yf.download(f"{stock_id}.TW", period="1y", auto_adjust=True)
     if df.empty:
         st.error(f"❌ 查無代號 {stock_id} 的行情資料，請確認股號是否正確。")
@@ -351,22 +350,19 @@ def show_single_stock_detail(stock_id):
     c2.metric("漲跌", f"{change:+.2f}")
     c3.metric("漲跌幅", f"{pct_change:+.2f}%")
 
-# -------------------------------------------------------------
-    # 📊 近 5 日籌碼每日交易明細與券賣數據 (替換原本的 cols 區塊)
+    # -------------------------------------------------------------
+    # 📊 近 5 日籌碼每日交易明細與券賣數據
     # -------------------------------------------------------------
     st.markdown("### 🔍 近 5 日籌碼每日交易明細 (含融券賣出)")
     
-    # 取得近 5 個交易日的日期列表
     recent_5_dates = [d.to_pydatetime().date() for d in df.index[-5:]]
-    
     chip_details = []
     for d in recent_5_dates:
         m_data, i_data, _ = crawler.get_latest_chip_summary(d)
-        
-        f_val = i_data[0] if i_data and len(i_data) > 0 else 0   # 外資
-        t_val = i_data[1] if i_data and len(i_data) > 1 else 0   # 投信
-        m_buy = m_data[0] if m_data and len(m_data) > 0 else 0   # 融資
-        s_sell = m_data[1] if m_data and len(m_data) > 1 else 0  # 融券 (券賣)
+        f_val = i_data[0] if i_data and len(i_data) > 0 else 0
+        t_val = i_data[1] if i_data and len(i_data) > 1 else 0
+        m_buy = m_data[0] if m_data and len(m_data) > 0 else 0
+        s_sell = m_data[1] if m_data and len(m_data) > 1 else 0
         
         chip_details.append({
             "日期": d.strftime("%Y-%m-%d"),
@@ -376,7 +372,6 @@ def show_single_stock_detail(stock_id):
             "融券/券賣 (張)": s_sell
         })
     
-    # 計算 5 日累計總和
     s_sell_sum5 = sum(x["融券/券賣 (張)"] for x in chip_details)
     sum_row = {
         "日期": "5日累計合計",
@@ -386,11 +381,9 @@ def show_single_stock_detail(stock_id):
         "融券/券賣 (張)": s_sell_sum5
     }
     
-    # 將明細按日期倒序（最新日期在最上層），並將「5日累計」放置於頂端
     chip_df = pd.DataFrame(chip_details).sort_values(by="日期", ascending=False)
     final_chip_df = pd.concat([pd.DataFrame([sum_row]), chip_df], ignore_index=True)
     
-    # 呈現樣式美化的表格
     st.dataframe(
         final_chip_df,
         column_config={
@@ -404,7 +397,9 @@ def show_single_stock_detail(stock_id):
         hide_index=True
     )
 
-    # 繪製 K 線圖
+    # -------------------------------------------------------------
+    # 📈 繪製 K 線圖 (截取近 240 天)
+    # -------------------------------------------------------------
     p_df = df.tail(240).copy()
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.75, 0.25])
 
@@ -427,12 +422,28 @@ def show_single_stock_detail(stock_id):
     
     st.plotly_chart(fig, use_container_width=True)
 
-    # ✅ 呼叫戰術指南 (這裡縮排正確了！)
+    # -------------------------------------------------------------
+    # 💡 呼叫戰術指南
+    # -------------------------------------------------------------
+    # 提取當日籌碼數值，供劇變煞車機制使用
+    f_today = i[0] if i and len(i) > 0 else 0
+    t_today = i[1] if i and len(i) > 1 else 0
+    m_today = m[0] if m and len(m) > 0 else 0
+
     render_tactical_guide(
-        stock_id=stock_id, stock_name=stock_name, price=price,
-        s_ma_val=p_df['MS'].iloc[-1], l_ma_val=p_df['ML'].iloc[-1],
-        t_sum5=t_sum5, f_sum5=f_sum5, m_sum5=m_sum5,
-        pct_change=pct_change, short_ma=short_ma
+        stock_id=stock_id,
+        stock_name=stock_name,
+        price=price,
+        s_ma_val=p_df['MS'].iloc[-1],
+        l_ma_val=p_df['ML'].iloc[-1],
+        t_sum5=t_sum5,
+        f_sum5=f_sum5,
+        m_sum5=m_sum5,
+        f_today=f_today,   # 新增當日外資
+        t_today=t_today,   # 新增當日投信
+        m_today=m_today,   # 新增當日融資
+        pct_change=pct_change,
+        short_ma=short_ma
     )
 
 # ==========================================
