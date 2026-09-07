@@ -302,7 +302,7 @@ def show_single_stock_detail(stock_id):
     st.subheader(f"📊 股票代號：{stock_name} 詳細技術與籌碼分析")
     
     # 下載歷史資料
-    df = yf.download(f"{stock_id}.TW", period="6mo", auto_adjust=True)
+    df = yf.download(f"{stock_id}.TW", period="1y", auto_adjust=True)
     if df.empty:
         st.error(f"❌ 查無代號 {stock_id} 的行情資料，請確認股號是否正確。")
         return
@@ -351,7 +351,7 @@ def show_single_stock_detail(stock_id):
         st.metric("近 5 日融資累計", f"{m_sum5:+d} 張", delta=f"當日: {m[1]:+d} 張" if m else None)
 
     # 繪製 K 線圖
-    p_df = df.tail(120).copy()
+    p_df = df.tail(240).copy()
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.75, 0.25])
 
     fig.add_trace(go.Candlestick(
