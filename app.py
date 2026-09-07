@@ -218,8 +218,25 @@ def render_tactical_guide(stock_id, stock_name, price, s_ma_val, l_ma_val, t_sum
     else:
         ma_state = "空頭"
         
-    # 2. 依據真實籌碼數據判定訊號
-    if t_sum5 > 0 and f_sum5 > 0:
+# 2. 依據真實籌碼數據判定訊號 (新增：當日劇變優先煞車機制)
+    # 先抓取最新一日 (當日) 的交易數據
+    crawler = ChipCrawlerV160(stock_id)
+    recent_dates = [d.to_pydatetime().date() for d in df.index[-10:]]
+    latest_date = recent_dates[-1]
+    m_data, i_data, _ = crawler.get_latest_chip_summary(latest_date)
+    
+    f_today = i_data[0] if i_data and len(i_data) > 0 else 0
+    t_today = i_data[1] if i_data and len(i_data) > 1 else 0
+    m_today = m_data[0] if m_data and len(m_data) > 0 else 0
+
+    # 🚨 第一優先：當日劇變煞車 (若當天法人大倒貨或散戶暴增，直接判定為危險訊號)
+    if m_today > 10000 and (f_today < -5000 or t_today < -2000):
+        signal = "💀 散戶接刀 (當日法人大賣/融資暴增)"
+    elif f_today < -10000 and t_today < 0:
+        signal = "💀 賣壓沉重 (當日法人同步大倒貨)"
+    # ---------------------------------------------------------
+    # 第二優先：正常的 5 日波段籌碼判讀
+    elif t_sum5 > 0 and f_sum5 > 0:
         signal = "🚀 土洋雙加碼"
     elif t_sum5 > 0:
         signal = "🔥 投信鎖碼"
