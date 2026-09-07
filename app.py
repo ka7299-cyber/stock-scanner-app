@@ -341,14 +341,58 @@ def show_single_stock_detail(stock_id):
     c2.metric("漲跌", f"{change:+.2f}")
     c3.metric("漲跌幅", f"{pct_change:+.2f}%")
 
-    st.markdown("### 🔍 近 5 日籌碼累積詳情")
-    cols = st.columns(3)
-    with cols[0]:
-        st.metric("近 5 日外資累計", f"{f_sum5:+d} 張", delta=f"當日: {i[0]:+d} 張" if i else None)
-    with cols[1]:
-        st.metric("近 5 日投信累計", f"{t_sum5:+d} 張", delta=f"當日: {i[1]:+d} 張" if i else None)
-    with cols[2]:
-        st.metric("近 5 日融資累計", f"{m_sum5:+d} 張", delta=f"當日: {m[1]:+d} 張" if m else None)
+# -------------------------------------------------------------
+    # 📊 近 5 日籌碼每日交易明細與券賣數據 (替換原本的 cols 區塊)
+    # -------------------------------------------------------------
+    st.markdown("### 🔍 近 5 日籌碼每日交易明細 (含融券賣出)")
+    
+    # 取得近 5 個交易日的日期列表
+    recent_5_dates = [d.to_pydatetime().date() for d in df.index[-5:]]
+    
+    chip_details = []
+    for d in recent_5_dates:
+        m_data, i_data, _ = crawler.get_latest_chip_summary(d)
+        
+        f_val = i_data[0] if i_data and len(i_data) > 0 else 0   # 外資
+        t_val = i_data[1] if i_data and len(i_data) > 1 else 0   # 投信
+        m_buy = m_data[0] if m_data and len(m_data) > 0 else 0   # 融資
+        s_sell = m_data[1] if m_data and len(m_data) > 1 else 0  # 融券 (券賣)
+        
+        chip_details.append({
+            "日期": d.strftime("%Y-%m-%d"),
+            "外資 (張)": f_val,
+            "投信 (張)": t_val,
+            "融資增減 (張)": m_buy,
+            "融券/券賣 (張)": s_sell
+        })
+    
+    # 計算 5 日累計總和
+    s_sell_sum5 = sum(x["融券/券賣 (張)"] for x in chip_details)
+    sum_row = {
+        "日期": "5日累計合計",
+        "外資 (張)": f_sum5,
+        "投信 (張)": t_sum5,
+        "融資增減 (張)": m_sum5,
+        "融券/券賣 (張)": s_sell_sum5
+    }
+    
+    # 將明細按日期倒序（最新日期在最上層），並將「5日累計」放置於頂端
+    chip_df = pd.DataFrame(chip_details).sort_values(by="日期", ascending=False)
+    final_chip_df = pd.concat([pd.DataFrame([sum_row]), chip_df], ignore_index=True)
+    
+    # 呈現樣式美化的表格
+    st.dataframe(
+        final_chip_df,
+        column_config={
+            "日期": st.column_config.TextColumn("日期 / 項目"),
+            "外資 (張)": st.column_config.NumberColumn("外資 (張)", format="%+d"),
+            "投信 (張)": st.column_config.NumberColumn("投信 (張)", format="%+d"),
+            "融資增減 (張)": st.column_config.NumberColumn("融資增減 (張)", format="%+d"),
+            "融券/券賣 (張)": st.column_config.NumberColumn("融券/券賣 (張)", format="%+d"),
+        },
+        use_container_width=True,
+        hide_index=True
+    )
 
     # 繪製 K 線圖
     p_df = df.tail(240).copy()
