@@ -458,13 +458,13 @@ def show_single_stock_detail(stock_id):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # -------------------------------------------------------------
+# -------------------------------------------------------------
     # 💡 呼叫戰術指南
     # -------------------------------------------------------------
-    # 提取當日籌碼數值，供劇變煞車機制使用
-    f_today = i[0] if i and len(i) > 0 else 0
-    t_today = i[1] if i and len(i) > 1 else 0
-    m_today = m[0] if m and len(m) > 0 else 0
+    # 安全提取當日籌碼數值，防止非 list 型態導致 TypeError
+    f_today = i[0] if isinstance(i, (list, tuple)) and len(i) > 0 else 0
+    t_today = i[1] if isinstance(i, (list, tuple)) and len(i) > 1 else 0
+    m_today = m[0] if isinstance(m, (list, tuple)) and len(m) > 0 else 0
 
     render_tactical_guide(
         stock_id=stock_id,
@@ -475,9 +475,9 @@ def show_single_stock_detail(stock_id):
         t_sum5=t_sum5,
         f_sum5=f_sum5,
         m_sum5=m_sum5,
-        f_today=f_today,   # 新增當日外資
-        t_today=t_today,   # 新增當日投信
-        m_today=m_today,   # 新增當日融資
+        f_today=f_today,
+        t_today=t_today,
+        m_today=m_today,
         pct_change=pct_change,
         short_ma=short_ma
     )
