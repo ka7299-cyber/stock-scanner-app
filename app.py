@@ -350,29 +350,53 @@ def show_single_stock_detail(stock_id):
     c2.metric("漲跌", f"{change:+.2f}")
     c3.metric("漲跌幅", f"{pct_change:+.2f}%")
 
-    # -------------------------------------------------------------
-    # 📊 近 5 日籌碼每日交易明細與券賣數據
+# -------------------------------------------------------------
+    # 📊 近 5 日籌碼每日交易明細與券賣數據 (已修正融資券增減邏輯)
     # -------------------------------------------------------------
     st.markdown("### 🔍 近 5 日籌碼每日交易明細 (含融券賣出)")
     
-    recent_5_dates = [d.to_pydatetime().date() for d in df.index[-5:]]
-    chip_details = []
-    for d in recent_5_dates:
+    # 為了計算單日「增減」，需要多往前抓 1 天的資料當作基準點
+    recent_6_dates = [d.to_pydatetime().date() for d in df.index[-6:]]
+    raw_details = []
+    
+    for d in recent_6_dates:
         m_data, i_data, _ = crawler.get_latest_chip_summary(d)
         f_val = i_data[0] if i_data and len(i_data) > 0 else 0
         t_val = i_data[1] if i_data and len(i_data) > 1 else 0
-        m_buy = m_data[0] if m_data and len(m_data) > 0 else 0
-        s_sell = m_data[1] if m_data and len(m_data) > 1 else 0
+        m_bal = m_data[0] if m_data and len(m_data) > 0 else 0  # 融資餘額
+        s_bal = m_data[1] if m_data and len(m_data) > 1 else 0  # 融券餘額
         
-        chip_details.append({
-            "日期": d.strftime("%Y-%m-%d"),
-            "外資 (張)": f_val,
-            "投信 (張)": t_val,
-            "融資增減 (張)": m_buy,
-            "融券/券賣 (張)": s_sell
+        raw_details.append({
+            "date": d,
+            "f_val": f_val,
+            "t_val": t_val,
+            "m_bal": m_bal,
+            "s_bal": s_bal
         })
     
+    # 計算每日增減量（今天的餘額 - 昨天的餘額）
+    chip_details = []
+    for i in range(1, len(raw_details)):
+        curr = raw_details[i]
+        prev = raw_details[i - 1]
+        
+        m_change = curr["m_bal"] - prev["m_bal"]  # 融資單日增減
+        s_change = curr["s_bal"] - prev["s_bal"]  # 融券單日增減
+        
+        chip_details.append({
+            "日期": curr["date"].strftime("%Y-%m-%d"),
+            "外資 (張)": curr["f_val"],
+            "投信 (張)": curr["t_val"],
+            "融資增減 (張)": m_change,
+            "融券/券賣 (張)": s_change
+        })
+    
+    # 計算 5 日合計
+    f_sum5 = sum(x["外資 (張)"] for x in chip_details)
+    t_sum5 = sum(x["投信 (張)"] for x in chip_details)
+    m_sum5 = sum(x["融資增減 (張)"] for x in chip_details)
     s_sell_sum5 = sum(x["融券/券賣 (張)"] for x in chip_details)
+    
     sum_row = {
         "日期": "5日累計合計",
         "外資 (張)": f_sum5,
