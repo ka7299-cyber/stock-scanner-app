@@ -414,7 +414,7 @@ def show_single_stock_detail(stock_id):
     v_cols = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
     fig.add_trace(go.Bar(x=p_df.index, y=p_df['Volume'], name='成交量', marker_color=v_cols), row=2, col=1)
     
-fig.update_layout(
+    fig.update_layout(
         height=550, template="plotly_white", xaxis_rangeslider_visible=False,
         showlegend=True, margin=dict(l=10, r=10, t=30, b=10), hovermode="x unified"
     )
