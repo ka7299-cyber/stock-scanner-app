@@ -414,12 +414,24 @@ def show_single_stock_detail(stock_id):
     v_cols = ['#ef5350' if c >= o else '#26a69a' for c, o in zip(p_df['Close'], p_df['Open'])]
     fig.add_trace(go.Bar(x=p_df.index, y=p_df['Volume'], name='成交量', marker_color=v_cols), row=2, col=1)
     
-    fig.update_layout(
+fig.update_layout(
         height=550, template="plotly_white", xaxis_rangeslider_visible=False,
         showlegend=True, margin=dict(l=10, r=10, t=30, b=10), hovermode="x unified"
     )
     fig.update_yaxes(side="right")
     
+    # === 新增這段：去除六日與國定假日的空白 ===
+    # 1. 產生這段期間所有連續日期的清單
+    dt_all = pd.date_range(start=p_df.index[0], end=p_df.index[-1])
+    # 2. 取出 DataFrame 實際有交易的日期
+    dt_obs = [d.strftime("%Y-%m-%d") for d in p_df.index]
+    # 3. 找出「在時間軸內，但沒有交易」的日子 (涵蓋六日與所有國定假日)
+    dt_breaks = [d for d in dt_all.strftime("%Y-%m-%d").tolist() if d not in dt_obs]
+    
+    # 4. 將這些沒交易的日子從 Plotly X 軸隱藏
+    fig.update_xaxes(rangebreaks=[dict(values=dt_breaks)])
+    # ===================================================
+
     st.plotly_chart(fig, use_container_width=True)
 
     # -------------------------------------------------------------
